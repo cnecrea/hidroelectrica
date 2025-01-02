@@ -1,0 +1,59 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Configurare Hidroelectrica",
+                "description": "Introduceți datele de autentificare pentru contul Hidroelectrica.",
+                "data": {
+                    "username": "Nume utilizator",
+                    "password": "Parolă",
+                    "update_interval": "Interval actualizare (secunde)"
+                }
+            }
+        },
+        "error": {
+            "auth_failed": "Autentificare eșuată. Verificați numele de utilizator și parola.",
+            "connection_error": "Nu s-a putut realiza conexiunea la serverul Hidroelectrica."
+        },
+        "abort": {
+            "already_configured": "Această integrare este deja configurată.",
+            "no_data": "Nu au fost obținute date de la server."
+        },
+        "options": {
+            "step": {
+                "init": {
+                    "title": "Opțiuni Hidroelectrica",
+                    "description": "Setați intervalul de actualizare.",
+                    "data": {
+                        "update_interval": "Interval actualizare (secunde)"
+                    }
+                }
+            }
+        }
+    },
+    "entity": {
+        "sensor": {
+            "default": {
+                "name": "Hidroelectrica Sensor",
+                "state": "Stare"
+            }
+        }
+    },
+    "system_health": {
+        "title": "Sănătatea sistemului Hidroelectrica",
+        "info": {
+            "api_endpoint_reachable": "Endpoint API accesibil"
+        }
+    },
+    "services": {
+        "reload": {
+            "name": "Reîncarcă integrarea",
+            "description": "Reîncarcă configurația integrării Hidroelectrica."
+        }
+    },
+    "device_automation": {
+        "trigger_type": {
+            "update_successful": "Actualizare reușită"
+        }
+    }
+}
