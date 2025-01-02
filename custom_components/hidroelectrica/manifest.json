@@ -1,0 +1,15 @@
+{
+    "dependencies": [],
+    "requirements": [],
+    "iot_class": "cloud_polling",
+    "config_flow": true,
+    "domain": "hidroelectrica",
+    "name": "Hidroelectrica România",
+    "version": "1.0.0",
+    "documentation": "https://github.com/cnecrea/hidroelectrica",
+    "issue_tracker": "https://github.com/cnecrea/hidroelectrica/issues",
+    "codeowners": ["@cnecrea"],
+    "translations": "translations",
+    "platforms": ["sensor"],
+    "icon": "custom_components/hidroelectrica/icon.png"
+}
