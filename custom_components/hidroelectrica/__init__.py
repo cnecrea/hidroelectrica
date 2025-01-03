@@ -1,7 +1,6 @@
 """Punctul central al integrării Hidroelectrica România."""
 import logging
-from datetime import timedelta
-
+from datetime import datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -143,19 +142,28 @@ class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
             bill_history = None
             if account_number and utility_account_number:
                 try:
+                    # Calculăm datele dinamice
+                    today = datetime.now()
+                    one_year_ago = today - timedelta(days=365)
+
+                    # Convertim datele în formatul string necesar (YYYY-MM-DD)
+                    from_date = one_year_ago.strftime("%Y-%m-%d")
+                    to_date = today.strftime("%Y-%m-%d")
+
+                    # Apelăm metoda pentru a obține istoricul facturilor
                     bill_history = await self.api_manager._async_get_bill_history(
                         account_number,
                         utility_account_number,
-                        "2023-01-01",
-                        "2023-12-31",
+                        from_date,
+                        to_date,
                     )
                 except ExpiredTokenError:
                     await self.api_manager.async_login()
                     bill_history = await self.api_manager._async_get_bill_history(
                         account_number,
                         utility_account_number,
-                        "2023-01-01",
-                        "2023-12-31",
+                        from_date,
+                        to_date,
                     )
 
             # 4. Info contoare
@@ -191,7 +199,11 @@ class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
                 "usage_generation": usage_generation,
             }
 
-            _LOGGER.debug("Datele actualizate: %s", data)
+            # Verificăm status_code în datele colectate
+            if all(datum.get("status_code") == 200 for datum in data.values() if datum):
+                _LOGGER.debug("Datele actualizate: OK")
+            else:
+                _LOGGER.error("Eroare la actualizare: unele răspunsuri nu au status_code 200. Date: %s", data)
             return data
 
         except Exception as error:
