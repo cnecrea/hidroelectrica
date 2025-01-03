@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from .api_manager import ApiManager, ExpiredTokenError
+from .const import DOMAIN
 
 from .const import (
     DOMAIN,
@@ -12,12 +14,10 @@ from .const import (
     CONF_UPDATE_INTERVAL,
     DEFAULT_UPDATE_INTERVAL,
 )
-from .api_manager import ApiManager, ExpiredTokenError
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor"]
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Configurare la adăugarea unei noi intrări de configurare."""
@@ -112,12 +112,10 @@ class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """
         Actualizăm datele prin apelarea API-ului.
-
-        Aici chemăm toate metodele de care avem nevoie
-        și construim un dict (self.data) returnat la final.
+        Construim un dict cu informațiile colectate (self.data).
         """
         try:
-            # 1. user_settings, cu re-login la nevoie
+            # 1. Obținem user_settings, cu re-login la nevoie
             try:
                 user_settings = await self.api_manager._async_get_user_settings()
             except ExpiredTokenError:
@@ -138,19 +136,15 @@ class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
                     await self.api_manager.async_login()
                     current_bill = await self.api_manager._async_get_bill(account_number, utility_account_number)
 
-            # 3. Istoric facturi
+            # 3. Istoric facturi (interval din ultimul an până azi)
             bill_history = None
             if account_number and utility_account_number:
+                today = datetime.now()
+                one_year_ago = today - timedelta(days=365)
+                from_date = one_year_ago.strftime("%Y-%m-%d")
+                to_date = today.strftime("%Y-%m-%d")
+
                 try:
-                    # Calculăm datele dinamice
-                    today = datetime.now()
-                    one_year_ago = today - timedelta(days=365)
-
-                    # Convertim datele în formatul string necesar (YYYY-MM-DD)
-                    from_date = one_year_ago.strftime("%Y-%m-%d")
-                    to_date = today.strftime("%Y-%m-%d")
-
-                    # Apelăm metoda pentru a obține istoricul facturilor
                     bill_history = await self.api_manager._async_get_bill_history(
                         account_number,
                         utility_account_number,
@@ -199,11 +193,22 @@ class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
                 "usage_generation": usage_generation,
             }
 
-            # Verificăm status_code în datele colectate
-            if all(datum.get("status_code") == 200 for datum in data.values() if datum):
+            # Verificăm status_code în toate datele colectate
+            # Notă: unii parametri pot fi None (ex. current_bill dacă nu avem cont),
+            # deci filtrăm cu "if datum" înainte de a verifica status_code.
+            all_200 = all(
+                (datum.get("status_code") == 200)
+                for datum in data.values()
+                if datum
+            )
+            if all_200:
                 _LOGGER.debug("Datele actualizate: OK")
             else:
-                _LOGGER.error("Eroare la actualizare: unele răspunsuri nu au status_code 200. Date: %s", data)
+                _LOGGER.error(
+                    "Eroare la actualizare: unele răspunsuri nu au status_code 200. Date: %s",
+                    data,
+                )
+
             return data
 
         except Exception as error:
