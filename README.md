@@ -1,4 +1,4 @@
-![logo](https://github.com/user-attachments/assets/03d8077e-b0fa-4017-8f81-ff03a40ba869)
+![logo](https://github.com/user-attachments/assets/fef5f68d-5137-4fab-90c5-da8dc28abbae)
 
 # Hidroelectrica România - Integrare pentru Home Assistant 🏠🇷🇴
 
