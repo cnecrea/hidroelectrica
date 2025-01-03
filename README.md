@@ -88,11 +88,11 @@ Afișează datele despre utilizator, facturi restante și istoric plăți pe int
 type: entities
 title: Monitorizare Hidroelectrica România
 entities:
-  - entity: sensor.date_utilizator
+  - entity: sensor.hidroelectrica_date_utilizator
     name: Date Utilizator
   - entity: sensor.hidroelectrica_factura_restanta
     name: Factură Restantă
-  - entity: sensor.istoric_facturi_achitate
+  - entity: sensor.hidroelectrica_istoric_facturi_achitate
     name: Istoric Facturi Achitate
 ```
 
