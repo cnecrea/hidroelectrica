@@ -97,7 +97,7 @@ entities:
 
 ---
 
-## ☕ Susține Dezvoltatorul
+## ☕ Susține dezvoltatorul
 
 Dacă ți-a plăcut această integrare și vrei să sprijini munca depusă, **invită-mă la o cafea**! 🫶  
 Nu costă nimic, iar contribuția ta ajută la dezvoltarea viitoare a proiectului. 🙌  
