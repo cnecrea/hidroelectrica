@@ -1,6 +1,7 @@
 """Punctul central al integrării Hidroelectrica România."""
 import logging
 from datetime import datetime, timedelta
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -18,6 +19,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor"]
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Configurare la adăugarea unei noi intrări de configurare."""
@@ -79,6 +81,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Configurăm platformele (ex. sensor)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    # IMPORTANT: înregistrăm un update_listener
+    # (astfel, dacă userul modifică opțiunile - intervalul -, se reîncarcă intrarea)
+    entry.async_on_unload(entry.add_update_listener(update_listener))
+
     return True
 
 
@@ -87,13 +93,22 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        hass.data[DOMAIN].pop(entry.entry_id, None)
         _LOGGER.info(
             "Intrarea de configurare %s a fost ștearsă cu succes.",
             entry.entry_id,
         )
 
     return unload_ok
+
+
+async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Callback apelat când opțiunile intrării sunt modificate."""
+    _LOGGER.debug(
+        "Opțiuni actualizate pentru entry %s. Se reîncarcă intrarea.",
+        entry.entry_id,
+    )
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
