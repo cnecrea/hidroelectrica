@@ -1,6 +1,7 @@
 """ConfigFlow și OptionsFlow pentru integrarea Hidroelectrica România."""
 
 import voluptuous as vol
+from homeassistant.core import callback
 from homeassistant import config_entries
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
 from .const import DOMAIN, DEFAULT_UPDATE_INTERVAL, CONF_UPDATE_INTERVAL
@@ -25,7 +26,7 @@ class HidroelectricaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             valid = await self._validate_auth(username, password)
             if valid:
                 return self.async_create_entry(
-                    title=f"Hidroelectrica  România ({username})",
+                    title=f"Hidroelectrica România ({username})",
                     data={
                         CONF_USERNAME: username,
                         CONF_PASSWORD: password,
@@ -47,10 +48,15 @@ class HidroelectricaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Returnează OptionsFlow asociat."""
+        return HidroelectricaOptionsFlow(config_entry)
+
     async def _validate_auth(self, username, password):
         """Funcție pentru validarea autentificării."""
         try:
-            # AICI e diferența: treci self.hass
             api_manager = ApiManager(self.hass, username, password)
             await api_manager.async_login()
             return True
@@ -84,4 +90,9 @@ class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
                 ): cv.positive_int,
             }
         )
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=schema,
+            errors={},
+            description_placeholders={},
+        )
