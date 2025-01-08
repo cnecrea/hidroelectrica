@@ -279,8 +279,10 @@ class HidroBillHistorySensor(CoordinatorEntity, SensorEntity):
                 except ValueError:
                     formatted_date = "necunoscut"
 
-                # Adăugăm în atribute
-                attributes[f"Achitată la data de {formatted_date}"] = f"{amount:,.2f} lei".replace(",", "X").replace(".", ",").replace("X", ".")
+                # Adăugăm în atribute cu indexul și suma pentru a asigura unicitatea
+                attributes[f"Plată {idx} - {formatted_date} - {amount:.2f} lei"] = (
+                    f"{amount:,.2f} lei".replace(",", "X").replace(".", ",").replace("X", ".")
+                )
             except ValueError:
                 continue
 
