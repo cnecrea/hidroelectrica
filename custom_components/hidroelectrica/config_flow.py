@@ -5,7 +5,7 @@ from homeassistant.core import callback
 from homeassistant import config_entries
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD
 from .const import DOMAIN, DEFAULT_UPDATE_INTERVAL, CONF_UPDATE_INTERVAL
-from .api_manager import ApiManager
+from .api import ApiManager
 import homeassistant.helpers.config_validation as cv
 
 
@@ -57,8 +57,8 @@ class HidroelectricaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _validate_auth(self, username, password):
         """Funcție pentru validarea autentificării."""
         try:
-            api_manager = ApiManager(self.hass, username, password)
-            await api_manager.async_login()
+            api = ApiManager(self.hass, username, password)
+            await api.async_login()
             return True
         except Exception:
             return False
@@ -78,14 +78,21 @@ class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         """Primul pas al OptionsFlow."""
         if user_input is not None:
+            # Actualizează opțiunile
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                options=user_input,  # Doar opțiunile, cum ar fi update_interval
+            )
             return self.async_create_entry(title="", data=user_input)
 
+        # Afișăm formularul pentru configurare
         schema = vol.Schema(
             {
                 vol.Optional(
                     CONF_UPDATE_INTERVAL,
                     default=self.config_entry.options.get(
-                        CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+                        CONF_UPDATE_INTERVAL,
+                        self.config_entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
                     ),
                 ): cv.positive_int,
             }
@@ -94,5 +101,4 @@ class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
             step_id="init",
             data_schema=schema,
             errors={},
-            description_placeholders={},
         )
