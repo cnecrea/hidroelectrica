@@ -2,25 +2,32 @@
 
 import logging
 from datetime import datetime
+from datetime import timedelta
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
 from homeassistant.helpers.device_registry import DeviceEntryType
-from .const import DOMAIN, ATTRIBUTION
+from .const import DOMAIN, ATTRIBUTION, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     """Configurează senzorii pe baza unei intrări de configurare."""
     data = hass.data[DOMAIN][entry.entry_id]
+
+    # Obține intervalul de actualizare din opțiuni sau din datele salvate
+    update_interval = entry.options.get(
+        CONF_UPDATE_INTERVAL, entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+    )
+
     coordinator: DataUpdateCoordinator = data["coordinator"]
+    coordinator.update_interval = timedelta(seconds=update_interval)  # Convertim în timedelta
 
     # Creezi entități separate
     sensors = [
         HidroUserSettingsSensor(coordinator, entry),
         HidroCurrentBillSensor(coordinator, entry),
         HidroBillHistorySensor(coordinator, entry),
-
     ]
 
     async_add_entities(sensors, True)
