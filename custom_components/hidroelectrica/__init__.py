@@ -5,21 +5,12 @@ from datetime import datetime, timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from .api_manager import ApiManager, ExpiredTokenError
-from .const import DOMAIN
-
-from .const import (
-    DOMAIN,
-    CONF_USERNAME,
-    CONF_PASSWORD,
-    CONF_UPDATE_INTERVAL,
-    DEFAULT_UPDATE_INTERVAL,
-)
+from .api import ApiManager, ExpiredTokenError
+from .const import DOMAIN, CONF_USERNAME, CONF_PASSWORD, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor"]
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Configurare la adăugarea unei noi intrări de configurare."""
@@ -39,9 +30,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     # Inițializăm managerul API
-    api_manager = ApiManager(hass, username, password)
+    api = ApiManager(hass, username, password)
     try:
-        await api_manager.async_login()
+        await api.async_login()
         _LOGGER.info("Autentificare reușită pentru utilizatorul %s.", username)
     except Exception as error:
         _LOGGER.error(
@@ -54,7 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Inițializăm coordinatorul
     coordinator = HidroelectricaDataUpdateCoordinator(
         hass,
-        api_manager,
+        api,
         update_interval=timedelta(seconds=update_interval),
     )
     try:
@@ -74,19 +65,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Stocăm referințele către manager și coordinator
     hass.data[DOMAIN][entry.entry_id] = {
-        "api_manager": api_manager,
+        "api": api,
         "coordinator": coordinator,
     }
 
     # Configurăm platformele (ex. sensor)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # IMPORTANT: înregistrăm un update_listener
-    # (astfel, dacă userul modifică opțiunile - intervalul -, se reîncarcă intrarea)
+    # Înregistrăm un update_listener pentru a reîncărca intrarea la modificări
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
     return True
-
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Gestionăm ștergerea unei intrări de configurare."""
@@ -101,7 +90,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     return unload_ok
 
-
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Callback apelat când opțiunile intrării sunt modificate."""
     _LOGGER.debug(
@@ -110,19 +98,18 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     )
     await hass.config_entries.async_reload(entry.entry_id)
 
-
 class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
     """Coordinator pentru gestionarea și actualizarea datelor de la API-ul Hidroelectrica."""
 
     def __init__(
         self,
         hass: HomeAssistant,
-        api_manager: ApiManager,
+        api: ApiManager,
         update_interval: timedelta,
     ):
         """Inițializează coordinatorul."""
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=update_interval)
-        self.api_manager = api_manager
+        self.api = api
 
     async def _async_update_data(self):
         """
@@ -132,12 +119,12 @@ class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             # 1. Obținem user_settings, cu re-login la nevoie
             try:
-                user_settings = await self.api_manager._async_get_user_settings()
+                user_settings = await self.api._async_get_user_settings()
             except ExpiredTokenError:
-                await self.api_manager.async_login()
-                user_settings = await self.api_manager._async_get_user_settings()
+                await self.api.async_login()
+                user_settings = await self.api._async_get_user_settings()
 
-            # Extragem conturile din user_settings (exemplu)
+            # Extragem conturile din user_settings
             account_number = user_settings["result"]["Data"]["Table1"][0]["AccountNumber"]
             utility_account_number = user_settings["result"]["Data"]["Table1"][0]["UtilityAccountNumber"]
             meter_number = user_settings["result"]["Data"]["Table1"][0].get("MeterNumber")
@@ -146,12 +133,12 @@ class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
             current_bill = None
             if account_number and utility_account_number:
                 try:
-                    current_bill = await self.api_manager._async_get_bill(account_number, utility_account_number)
+                    current_bill = await self.api._async_get_bill(account_number, utility_account_number)
                 except ExpiredTokenError:
-                    await self.api_manager.async_login()
-                    current_bill = await self.api_manager._async_get_bill(account_number, utility_account_number)
+                    await self.api.async_login()
+                    current_bill = await self.api._async_get_bill(account_number, utility_account_number)
 
-            # 3. Istoric facturi (interval din ultimul an până azi)
+            # 3. Istoric facturi
             bill_history = None
             if account_number and utility_account_number:
                 today = datetime.now()
@@ -160,15 +147,15 @@ class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
                 to_date = today.strftime("%Y-%m-%d")
 
                 try:
-                    bill_history = await self.api_manager._async_get_bill_history(
+                    bill_history = await self.api._async_get_bill_history(
                         account_number,
                         utility_account_number,
                         from_date,
                         to_date,
                     )
                 except ExpiredTokenError:
-                    await self.api_manager.async_login()
-                    bill_history = await self.api_manager._async_get_bill_history(
+                    await self.api.async_login()
+                    bill_history = await self.api._async_get_bill_history(
                         account_number,
                         utility_account_number,
                         from_date,
@@ -179,13 +166,13 @@ class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
             multi_meter = None
             if account_number and utility_account_number:
                 try:
-                    multi_meter = await self.api_manager._async_get_multi_meter(
+                    multi_meter = await self.api._async_get_multi_meter(
                         account_number,
                         utility_account_number,
                     )
                 except ExpiredTokenError:
-                    await self.api_manager.async_login()
-                    multi_meter = await self.api_manager._async_get_multi_meter(
+                    await self.api.async_login()
+                    multi_meter = await self.api._async_get_multi_meter(
                         account_number,
                         utility_account_number,
                     )
@@ -194,10 +181,10 @@ class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
             usage_generation = None
             if meter_number:
                 try:
-                    usage_generation = await self.api_manager._async_get_usage_generation(meter_number)
+                    usage_generation = await self.api._async_get_usage_generation(meter_number)
                 except ExpiredTokenError:
-                    await self.api_manager.async_login()
-                    usage_generation = await self.api_manager._async_get_usage_generation(meter_number)
+                    await self.api.async_login()
+                    usage_generation = await self.api._async_get_usage_generation(meter_number)
 
             # Construim un dict cu TOT ce am colectat
             data = {
@@ -208,9 +195,7 @@ class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
                 "usage_generation": usage_generation,
             }
 
-            # Verificăm status_code în toate datele colectate
-            # Notă: unii parametri pot fi None (ex. current_bill dacă nu avem cont),
-            # deci filtrăm cu "if datum" înainte de a verifica status_code.
+            # Verificăm status_code
             all_200 = all(
                 (datum.get("status_code") == 200)
                 for datum in data.values()
@@ -228,5 +213,4 @@ class HidroelectricaDataUpdateCoordinator(DataUpdateCoordinator):
 
         except Exception as error:
             _LOGGER.error("Eroare la actualizarea datelor: %s", error)
-            # Re-raise, pentru că DataUpdateCoordinator are nevoie să știe de excepție
             raise
