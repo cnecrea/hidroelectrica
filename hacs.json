@@ -9,5 +9,9 @@
     "documentation": "https://github.com/cnecrea/hidroelectrica",
     "issue_tracker": "https://github.com/cnecrea/hidroelectrica/issues",
     "render_readme": true,
-    "version": "1.0.0"
+    "persistent_directory": "userfiles",
+    "content_in_root": false,
+    "version": "1.0.0",
+    "zip_release": true,
+    "filename": "hidroelectrica.zip"
 }
