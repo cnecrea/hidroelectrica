@@ -1,259 +1,404 @@
-"""Manager pentru gestionarea cererilor către API-ul Hidroelectrica România."""
+"""
+Modul care definește clasa HidroelectricaAPI pentru apeluri la API-ul Hidroelectrica România.
+
+- Folosim requests (sincron).
+- Fiecare endpoint are propria metodă.
+- Stocăm datele brute din ValidateUserLogin + GetUserSetting pentru a le putea expune către coordinator.
+- Cu metoda login_if_needed(), evităm logarea repetată la fiecare refresh (dacă deja avem session_token).
+"""
 
 import logging
-import async_timeout
-from aiohttp import BasicAuth, ClientSession
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+import requests
+import base64
+import json
+import urllib3
+from datetime import datetime
 
 from .const import (
+    API_BASE_URL,
     API_URL_GET_ID,
     API_URL_VALIDATE_LOGIN,
     API_URL_GET_USER_SETTING,
+    API_GET_MULTI_METER,
+    API_GET_MULTI_METER_CURRENT,
+    API_GET_MULTI_METER_READ_DATE,
     API_URL_GET_BILL,
     API_URL_GET_BILL_HISTORY,
-    API_URL_GET_MULTI_METER,
     API_URL_GET_USAGE_GENERATION,
 )
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class ExpiredTokenError(Exception):
-    """Excepție ridicată când API-ul semnalează un token expirat/invalid (ex. 401)."""
-    pass
+class HidroelectricaAPI:
+    def __init__(self, username: str, password: str):
+        self._username = username
+        self._password = password
 
+        self._user_id = None
+        self._session_token = None
+        self._auth_header = None
+        self._token_id = None
+        self._key = None
 
-class ApiManager:
-    """Manager pentru gestionarea autentificării și cererilor API."""
+        self._utility_accounts = []
 
-    def __init__(self, hass: HomeAssistant, username: str, password: str):
-        """Inițializează managerul API."""
-        self.hass = hass
-        self.username = username
-        self.password = password
-        self.session: ClientSession = async_get_clientsession(hass)
-        self.token_id = None
-        self.key = None
-        self.user_id = None
-        self.session_token = None
+        # Sesiune requests
+        self._session = requests.Session()
+        self._session.verify = False
 
-    async def async_login(self):
-        """Realizează autentificarea cu API-ul."""
-        _LOGGER.debug("Începe autentificarea utilizatorului %s", self.username)
+        # Date brute reținute pentru coordinator:
+        # - rândurile din ValidateUserLogin (Table)
+        self._validate_user_login_rows = []  # list[dict]
+        # - tot JSON-ul brut primit la get_user_setting
+        self._raw_user_setting_data = {}      # dict complet
 
-        # 1. Cerere pentru token și cheie
-        async with async_timeout.timeout(10):
-            response = await self.session.post(
-                API_URL_GET_ID,
-                headers={
-                    "SourceType": "0",
-                    "Content-Type": "application/json",
-                    "User-Agent": "okhttp/4.9.0",
-                },
-                json={},
-            )
-            data = await response.json()
-            self._check_for_expiration(data)
-            self.token_id = data["result"]["Data"]["tokenId"]
-            self.key = data["result"]["Data"]["key"]
-            _LOGGER.debug("Token și cheie obținute: %s, %s", self.token_id, self.key)
-
-        # 2. Cerere pentru autentificare
-        auth = BasicAuth(self.key, self.token_id)
-        async with async_timeout.timeout(10):
-            response = await self.session.post(
-                API_URL_VALIDATE_LOGIN,
-                headers={
-                    "SourceType": "0",
-                    "Content-Type": "application/json",
-                    "Authorization": auth.encode(),
-                    "User-Agent": "okhttp/4.9.0",
-                },
-                json={
-                    "deviceType": "MobileApp",
-                    "OperatingSystem": "Android",
-                    "LanguageCode": "RO",
-                    "password": self.password,
-                    "UserId": self.username,
-                },
-            )
-            data = await response.json()
-            self._check_for_expiration(data)
-            user_data = data["result"]["Data"]["Table"][0]
-            self.user_id = user_data["UserID"]
-            self.session_token = user_data["SessionToken"]
-            _LOGGER.debug("Autentificare reușită pentru utilizatorul %s", self.username)
-
-    def _check_for_expiration(self, data: dict):
+    def login_if_needed(self) -> None:
         """
-        Verifică dacă răspunsul semnalează un token invalid/expirat,
-        de obicei 'status_code' == 401 semnifică 'UnAuthorized Access'.
+        Face login doar dacă _session_token e None.
+        Evităm logarea repetitivă la fiecare apel.
         """
-        status_code = data.get("status_code", 0)
-        if status_code == 401:
-            # Serverul semnalează 'UnAuthorized Access'
-            raise ExpiredTokenError("Sesiune expirată sau neautorizată (401).")
+        if self._session_token:
+            _LOGGER.debug("Avem deja session_token, deci nu mai refacem login.")
+            return
 
-        # Dacă API-ul ar semnala altfel (ex. "errorMessage" = "Session expired"),
-        # poți verifica aici și să ridici ExpiredTokenError.
+        # Altfel, facem login complet
+        self.login()
 
-    def _get_authenticated_headers(self):
-        """Generează anteturile de autentificare pentru cererile API."""
-        auth = BasicAuth(str(self.user_id), self.session_token)
-        return {
+    def login(self) -> None:
+        """
+        Secvența clasică de autentificare la Hidroelectrica:
+          1. API_URL_GET_ID (key + token_id)
+          2. API_URL_VALIDATE_LOGIN (username/password)
+          3. get_user_setting => conturile
+        """
+        _LOGGER.debug("=== HIDRO: Începem login pentru user '%s'... ===", self._username)
+
+        # 1. GetId
+        resp_get_id = self._post_request(
+            API_URL_GET_ID,
+            payload={},
+            headers={
+                "SourceType": "0",
+                "Content-Type": "application/json",
+                "Host": "hidroelectrica-svc.smartcmobile.com",
+                "User-Agent": "okhttp/4.9.0",
+            },
+            descriere="Obținere ID utilizator (GetId)"
+        )
+        self._key = resp_get_id["result"]["Data"]["key"]
+        self._token_id = resp_get_id["result"]["Data"]["tokenId"]
+
+        _LOGGER.debug("Am obținut key=%s, token_id=%s", self._key, self._token_id)
+
+        # 2. Validate Login
+        auth = base64.b64encode(f"{self._key}:{self._token_id}".encode()).decode()
+        login_headers = {
+            "SourceType": "0",
+            "Content-Type": "application/json",
+            "Host": "hidroelectrica-svc.smartcmobile.com",
+            "User-Agent": "okhttp/4.9.0",
+            "Authorization": f"Basic {auth}"
+        }
+        login_payload = {
+            "deviceType": "MobileApp",
+            "OperatingSystem": "Android",
+            "UpdatedDate": datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
+            "Deviceid": "",
+            "SessionCode": "",
+            "LanguageCode": "RO",
+            "password": self._password,
+            "UserId": self._username,
+            "TFADeviceid": "",
+            "OSVersion": 14,
+            "TimeOffSet": "120",
+            "LUpdHideShow": datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
+            "Browser": "NA"
+        }
+        resp_login = self._post_request(
+            API_URL_VALIDATE_LOGIN,
+            payload=login_payload,
+            headers=login_headers,
+            descriere="Autentificare (ValidateUserLogin)"
+        )
+
+        # 2.1. Citim rândurile din "Table"
+        self._validate_user_login_rows = resp_login["result"]["Data"].get("Table", [])
+        if not self._validate_user_login_rows:
+            raise Exception("Eroare: Lipsește 'Table' sau e gol în ValidateUserLogin.")
+
+        first_user_entry = self._validate_user_login_rows[0]
+        self._user_id = first_user_entry["UserID"]
+        self._session_token = first_user_entry["SessionToken"]
+
+        _LOGGER.debug("UserID=%s, SessionToken=%s", self._user_id, self._session_token)
+
+        encoded_auth = base64.b64encode(f"{self._user_id}:{self._session_token}".encode()).decode()
+        self._auth_header = {
             "SourceType": "1",
             "Content-Type": "application/json",
             "Host": "hidroelectrica-svc.smartcmobile.com",
-            "Authorization": auth.encode(),
             "User-Agent": "okhttp/4.9.0",
+            "Authorization": f"Basic {encoded_auth}"
         }
 
-    async def _async_get_user_settings(self):
-        """Obține setările utilizatorului."""
-        payload = {"UserID": self.user_id}
-        _LOGGER.debug("Cerere GET_USER_SETTING cu payload: %s", payload)
+        # 3. get_user_setting => conturi
+        resp_userset = self._get_utility_accounts()  # stocăm și în self._utility_accounts
+        self._raw_user_setting_data = resp_userset   # tot JSON-ul brut
 
-        async with async_timeout.timeout(10):
-            response = await self.session.post(
-                API_URL_GET_USER_SETTING,
-                headers=self._get_authenticated_headers(),
-                json=payload,
-            )
-            data = await response.json()
-            self._check_for_expiration(data)
+        _LOGGER.debug(
+            "=== HIDRO: Login finalizat pentru '%s'. Identificate %d cod(uri) de încasare. ===",
+            self._username, len(self._utility_accounts)
+        )
 
-        status_code = data.get("status_code", 0)
-        if status_code == 200:
-            _LOGGER.debug("Răspuns GET_USER_SETTING: OK")
-        else:
-            _LOGGER.error(
-                "Eroare GET_USER_SETTING: Cod status %s, Răspuns complet: %s",
-                status_code,
-                data,
-            )
-        return data
+    def _get_utility_accounts(self):
+        """
+        Apel la GetUserSetting, returnează tot JSON-ul brut.
+        De asemenea, populăm self._utility_accounts cu conturile filtrate.
+        """
+        payload = {"UserID": self._user_id}
+        resp = self._post_request(
+            API_URL_GET_USER_SETTING,
+            payload=payload,
+            headers=self._auth_header,
+            descriere="Setări Utilizator (GetUserSetting)"
+        )
 
-    async def _async_get_bill(self, account_number, utility_account_number):
-        """Obține factura curentă."""
-        payload = {
-            "LanguageCode": "RO",
-            "UserID": self.user_id,
-            "IsBillPDF": "0",
-            "AccountNumber": account_number,
-            "UtilityAccountNumber": utility_account_number,
-        }
-        _LOGGER.debug("Cerere GET_BILL cu payload: %s", payload)
+        data = resp["result"]["Data"]
+        accounts = []
+        if "Table1" in data and data["Table1"]:
+            accounts.extend(data["Table1"])
+        if "Table2" in data and data["Table2"]:
+            for entry in data["Table2"]:
+                if entry not in accounts:
+                    accounts.append(entry)
 
-        async with async_timeout.timeout(10):
-            response = await self.session.post(
-                API_URL_GET_BILL,
-                headers=self._get_authenticated_headers(),
-                json=payload,
-            )
-            data = await response.json()
-            self._check_for_expiration(data)
+        filtered = []
+        for acc in accounts:
+            if acc.get("UtilityAccountNumber"):
+                filtered.append(
+                    {
+                        "AccountNumber": acc.get("AccountNumber"),
+                        "UtilityAccountNumber": acc.get("UtilityAccountNumber"),
+                        "Address": acc.get("Address"),
+                        "IsDefaultAccount": acc.get("IsDefaultAccount"),
+                    }
+                )
+        self._utility_accounts = filtered
+        return resp
 
-        status_code = data.get("status_code", 0)
-        if status_code == 200:
-            _LOGGER.debug("Răspuns GET_BILL: OK")
-        else:
-            _LOGGER.error(
-                "Eroare GET_BILL: Cod status %s, Răspuns complet: %s",
-                status_code,
-                data,
-            )
-        return data
+    # ---------------------------------------------------------------------
+    # Metode "get_validate_user_login_data" & "get_raw_user_setting_data"
+    # ---------------------------------------------------------------------
+    def get_validate_user_login_data(self):
+        """
+        Returnează list[dict], conținutul integral al "Table" 
+        din ValidateUserLogin (resp_login).
+        """
+        return self._validate_user_login_rows
 
-    async def _async_get_bill_history(
-        self, account_number, utility_account_number, from_date, to_date
-    ):
-        """Obține istoricul facturilor."""
-        payload = {
-            "LanguageCode": "RO",
-            "UserID": self.user_id,
-            "AccountNumber": account_number,
-            "UtilityAccountNumber": utility_account_number,
-            "FromDate": from_date,
-            "ToDate": to_date,
-        }
-        _LOGGER.debug("Cerere GET_BILL_HISTORY cu payload: %s", payload)
+    def get_raw_user_setting_data(self):
+        """
+        Returnează JSON-ul brut (dict) primit la GetUserSetting.
+        """
+        return self._raw_user_setting_data
 
-        async with async_timeout.timeout(10):
-            response = await self.session.post(
-                API_URL_GET_BILL_HISTORY,
-                headers=self._get_authenticated_headers(),
-                json=payload,
-            )
-            data = await response.json()
-            self._check_for_expiration(data)
+    def get_utility_accounts(self):
+        """
+        Returnează lista conturilor extrase deja (filtered).
+        """
+        return self._utility_accounts
 
-        status_code = data.get("status_code", 0)
-        if status_code == 200:
-            _LOGGER.debug("Răspuns GET_BILL_HISTORY: OK")
-        else:
-            _LOGGER.error(
-                "Eroare GET_BILL_HISTORY: Cod status %s, Răspuns complet: %s",
-                status_code,
-                data,
-            )
-        return data
+    def login_if_needed(self) -> None:
+        """
+        Face login doar dacă _session_token e None (sau considerăm expirat).
+        """
+        if self._session_token:
+            _LOGGER.debug("Avem deja session_token, nu mai refacem login.")
+            return
+        self.login()
 
-    async def _async_get_multi_meter(self, account_number, utility_account_number):
-        """Obține informații despre contoare."""
+    def close(self):
+        """
+        Închide sesiunea requests (opțional).
+        """
+        self._session.close()
+        _LOGGER.debug("Sesiunea Hidroelectrica închisă.")
+
+    # ---------------------------------------------------------------------
+    #  Metode pentru restul endpoint-urilor 
+    # ---------------------------------------------------------------------
+    def get_multi_meter_details(self, utility_account_number, account_number):
         payload = {
             "MeterType": "E",
-            "UserID": self.user_id,
+            "UserID": self._user_id,
+            "UtilityAccountNumber": utility_account_number,
+            "AccountNumber": account_number
+        }
+        return self._post_request(
+            API_GET_MULTI_METER,
+            payload=payload,
+            headers=self._auth_header,
+            descriere="GetMultiMeter (Detalii contor)"
+        )
+
+    def get_current_meter_value(self, utility_account_number, account_number):
+        payload = {
+            "MeterType": "E",
+            "UserID": self._user_id,
+            "UtilityAccountNumber": utility_account_number,
+            "AccountNumber": account_number
+        }
+        return self._post_request(
+            API_GET_MULTI_METER_CURRENT,
+            payload=payload,
+            headers=self._auth_header,
+            descriere="GetMeterValue (Index contor)"
+        )
+
+    def get_window_dates_enc(self, utility_account_number, account_number):
+        payload = {
+            "MeterType": "E",
+            "UserID": self._user_id,
+            "UtilityAccountNumber": utility_account_number,
+            "AccountNumber": account_number
+        }
+        return self._post_request(
+            API_GET_MULTI_METER_READ_DATE,
+            payload=payload,
+            headers=self._auth_header,
+            descriere="GetWindowDatesENC (Fereastra citire)"
+        )
+
+    def get_current_bill(self, utility_account_number, account_number):
+        payload = {
+            "LanguageCode": "RO",
+            "UserID": self._user_id,
+            "IsBillPDF": "0",
+            "UtilityAccountNumber": utility_account_number,
+            "AccountNumber": account_number
+        }
+        return self._post_request(
+            API_URL_GET_BILL,
+            payload=payload,
+            headers=self._auth_header,
+            descriere="GetBill (Factura curentă)"
+        )
+
+    def get_bill_history(self, utility_account_number, account_number, from_date, to_date):
+        payload = {
+            "LanguageCode": "RO",
+            "UserID": self._user_id,
             "UtilityAccountNumber": utility_account_number,
             "AccountNumber": account_number,
+            "FromDate": from_date,
+            "ToDate": to_date
         }
-        _LOGGER.debug("Cerere GET_MULTI_METER cu payload: %s", payload)
+        return self._post_request(
+            API_URL_GET_BILL_HISTORY,
+            payload=payload,
+            headers=self._auth_header,
+            descriere="GetBillingHistoryList (Istoric Facturi)"
+        )
 
-        async with async_timeout.timeout(10):
-            response = await self.session.post(
-                API_URL_GET_MULTI_METER,
-                headers=self._get_authenticated_headers(),
-                json=payload,
-            )
-            data = await response.json()
-            self._check_for_expiration(data)
-
-        status_code = data.get("status_code", 0)
-        if status_code == 200:
-            _LOGGER.debug("Răspuns GET_MULTI_METER: OK")
-        else:
-            _LOGGER.error(
-                "Eroare GET_MULTI_METER: Cod status %s, Răspuns complet: %s",
-                status_code,
-                data,
-            )
-        return data
-
-    async def _async_get_usage_generation(self, meter_number):
-        """Obține istoricul consumului."""
+    def get_usage_generation(self, utility_account_number, account_number):
         payload = {
-            "UserID": self.user_id,
-            "MeterNumber": meter_number,
+            "date": "",
+            "IsCSR": False,
+            "IsUSD": False,
+            "Mode": "M",
+            "HourlyType": "H",
+            "UsageType": "e",
+            "UsageOrGeneration": False,
+            "GroupId": 0,
             "LanguageCode": "RO",
+            "Type": "D",
+            "MeterNumber": "",
+            "IsEnterpriseUser": False,
+            "SeasonType": 0,
+            "DateFromDaily": "",
+            "IsNetUsage": False,
+            "TimeOffset": "120",
+            "UserType": "Residential",
+            "DateToDaily": "",
+            "UtilityId": 0,
+            "IsLastTendays": False,
+            "UserID": self._user_id,
+            "UtilityAccountNumber": utility_account_number,
+            "AccountNumber": account_number
         }
-        _LOGGER.debug("Cerere GET_USAGE_GENERATION cu payload: %s", payload)
+        return self._post_request(
+            API_URL_GET_USAGE_GENERATION,
+            payload=payload,
+            headers=self._auth_header,
+            descriere="GetUsageGeneration (Istoric consum/generare)"
+        )
 
-        async with async_timeout.timeout(10):
-            response = await self.session.post(
-                API_URL_GET_USAGE_GENERATION,
-                headers=self._get_authenticated_headers(),
-                json=payload,
-            )
-            data = await response.json()
-            self._check_for_expiration(data)
+    def _post_request(self, url, payload, headers, descriere="Fără descriere"):
+        """
+        Metodă internă care face un POST și returnează JSON-ul decodat.
+        Dacă primim 401, încercăm re-autentificare o dată și refacem cererea,
+        dar doar dacă UAN încă există în noile conturi.
+        """
+        _LOGGER.debug("=== Cerere POST către %s (%s) ===", url, descriere)
 
-        status_code = data.get("status_code", 0)
-        if status_code == 200:
-            _LOGGER.debug("Răspuns GET_USAGE_GENERATION: OK")
-        else:
-            _LOGGER.error(
-                "Eroare GET_USAGE_GENERATION: Cod status %s, Răspuns complet: %s",
-                status_code,
-                data,
-            )
-        return data
+        # 1. Prima încercare
+        response = self._session.post(url, json=payload, headers=headers, timeout=10)
+        if response.status_code == 401:
+            _LOGGER.warning("Am primit 401 la %s, încerc re-autentificare...", descriere)
+            # Invalidăm token-ul curent
+            self._session_token = None
+            # Apelăm login_if_needed(), care va seta un nou session_token
+            self.login_if_needed()
+
+            # Facem refresh la conturile după re-login
+            # (Poate userul actual nu mai are acces la UAN-ul cerut)
+            new_accounts = self.get_utility_accounts()  # reîncărcăm
+            # Observăm dacă payload-ul conține "UtilityAccountNumber" + "AccountNumber"
+            # (și vrei să verifici că există încă)
+            # => Presupunem că, la majoritatea endpoint-urilor, avem "UtilityAccountNumber" în payload
+            new_uan = payload.get("UtilityAccountNumber")
+            if new_uan:
+                # Vedem dacă UAN există în new_accounts
+                has_uan = any(a["UtilityAccountNumber"] == new_uan for a in new_accounts)
+                if not has_uan:
+                    # userul nu mai are acces la acest UAN => ridicăm excepție direct
+                    raise Exception(
+                        f"Userul nu mai are acces la UAN={new_uan}. "
+                        f"Re-login a reușit, dar contul nu mai figurează în get_utility_accounts()."
+                    )
+
+            # A doua încercare (retry)
+            response = self._session.post(url, json=payload, headers=self._auth_header, timeout=10)
+
+        # După eventualul retry, dacă tot nu e 200, ridicăm excepție
+        if response.status_code != 200:
+            raise Exception(f"Eroare la cererea {descriere}: {response.status_code}, {response.text}")
+
+        return response.json()
+
+
+if __name__ == "__main__":
+    """
+    Test local.
+    """
+    api = HidroelectricaAPI("nume_utilizator", "parola")
+    try:
+        # login_if_needed() => va apela login() doar dacă e necesar
+        api.login_if_needed()
+        conturi = api.get_utility_accounts()
+        print("Coduri de încasare:", conturi)
+
+        rows = api.get_validate_user_login_data()
+        print("Rânduri ValidateUserLogin:", rows)
+
+        raw_userset = api.get_raw_user_setting_data()
+        print("Raw userSetting:", json.dumps(raw_userset, indent=2))
+
+        # A doua oară, nu se mai face login
+        api.login_if_needed()
+
+    finally:
+        api.close()
