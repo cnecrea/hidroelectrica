@@ -372,6 +372,8 @@ class HidroelectricaAPI:
 
             # A doua încercare (retry)
             response = self._session.post(url, json=payload, headers=self._auth_header, timeout=10)
+            # Adăugăm logger pentru debug.
+            _LOGGER.debug("Răspuns HTTP: %s, Conținut: %s", response.status_code, response.text)
 
         # După eventualul retry, dacă tot nu e 200, ridicăm excepție
         if response.status_code != 200:
