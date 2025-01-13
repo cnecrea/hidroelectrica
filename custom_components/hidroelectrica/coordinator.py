@@ -116,10 +116,19 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
                     self.api.get_current_bill, uan, acc_no
                 )
 
+
+                # Calculăm intervalul de date dinamic
+                end_date = datetime.now()  # Data curentă
+                start_date = end_date - timedelta(days=2 * 365)  # Cu aproximativ doi ani în urmă
+
+                start_date_str = start_date.strftime("%Y-%m-%d")  # Formatare: "YYYY-MM-DD"
+                end_date_str = end_date.strftime("%Y-%m-%d")      # Formatare: "YYYY-MM-DD"
+
                 # Istoric facturi
                 resp_billing_history = await self.hass.async_add_executor_job(
-                    self.api.get_bill_history, uan, acc_no, "2023-01-01", "2025-01-01"
+                    self.api.get_bill_history, uan, acc_no, start_date_str, end_date_str
                 )
+
 
                 resp_usage_gen = await self.hass.async_add_executor_job(
                     self.api.get_usage_generation, uan, acc_no
