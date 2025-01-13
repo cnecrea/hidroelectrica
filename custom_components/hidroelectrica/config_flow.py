@@ -1,9 +1,5 @@
 """
 Flux de configurare pentru integrarea Hidroelectrica România.
-
-Aici definim formularele din Home Assistant (Config Flow) prin care
-utilizatorul introduce user, parola și intervalul de actualizare (update_interval).
-De asemenea, avem un Options Flow care permite modificarea update_interval ulterior.
 """
 
 import logging
