@@ -5,7 +5,7 @@
     "config_flow": true,
     "domain": "hidroelectrica",
     "name": "Hidroelectrica România",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "documentation": "https://github.com/cnecrea/hidroelectrica",
     "issue_tracker": "https://github.com/cnecrea/hidroelectrica/issues",
     "codeowners": ["@cnecrea"],
