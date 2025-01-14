@@ -1,0 +1,62 @@
+name: Raportare problemă
+description: Raportați o problemă legată de integrarea Hidroelectrica.
+title: "Descriere scurtă a problemei"
+labels: ajutor necesar
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Vă rugăm să completați informațiile de mai jos pentru a ne ajuta să înțelegem problema și să o rezolvăm mai rapid.
+
+  - type: textarea
+    id: descriere
+    attributes:
+      label: Descrieți problema
+      description: Explicați clar ce s-a întâmplat, inclusiv pașii pentru a reproduce problema.
+      placeholder: "Descrieți aici problema"
+    validations:
+      required: true
+
+  - type: input
+    id: versiune
+    attributes:
+      label: Versiunea integrării
+      description: Specificați versiunea actuală instalată (o puteți verifica în `custom_components/hidroelectrica/manifest.json`).
+      placeholder: "Exemplu: 2.0.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: loguri
+    attributes:
+      label: Loguri relevante
+      description: >
+        Adăugați logurile relevante pentru problemă. Utilizați formatul următor:
+        ```yaml
+        # Exemplu:
+        2025-01-14 03:08:37.818 ERROR (MainThread) [custom_components.hidroelectrica.sensor] Eroare la parsarea sumei: 1.580,10
+        ```
+      value: |
+        ```yaml
+        # ↑↓ Introduceți logurile aici, nu ștergeți liniile indicate cu săgeți
+        ```
+    validations:
+      required: true
+
+  - type: dropdown
+    id: restart
+    attributes:
+      label: Ați încercat să dați restart?
+      description: Confirmă dacă ați încercat să dați restart la Home Assistant.
+      options:
+        - "Da"
+        - "Nu"
+    validations:
+      required: true
+
+  - type: input
+    id: sistem_operare
+    attributes:
+      label: Sistem de operare
+      description: Specificați sistemul de operare utilizat (ex. Home Assistant OS, Docker, etc.).
+      placeholder: "Exemplu: Home Assistant OS"
