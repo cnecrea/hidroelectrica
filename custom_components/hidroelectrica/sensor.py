@@ -10,8 +10,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components.sensor import SensorStateClass
 from .const import DOMAIN, ATTRIBUTION
 
-_LOGGER = logging.getLogger(__name__)
-
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def _extract_year_from_dd_mm_yyyy(date_str: str) -> int:
     """
@@ -337,21 +337,30 @@ class FacturaRestantaSensor(HidroelectricaBaseSensor):
     @property
     def native_value(self):
         """
-        Exemplu: Returnează 'Da' dacă există sumă rămasă de plată (rembalance) 
+        Returnează 'Da' dacă există sumă rămasă de plată (rembalance) 
         sau 'Nu' dacă factura este achitată integral sau are un sold negativ.
         """
         bill_data = self._get_bill_data()
+        logger.debug(f"Bill data in native_value: {bill_data}")
+
         if not bill_data:
+            logger.debug("Bill data is None or empty.")
             return None
 
         result_block = bill_data.get("result", {})
         rembalance = result_block.get("rembalance", "N/A")
 
+        logger.debug(f"Result block: {result_block}")
+        logger.debug(f"Rembalance value: {rembalance}")
+
         # Convertim rembalance în float pentru verificare, dacă este posibil
         try:
             rembalance_value = float(rembalance.replace(",", "."))
         except (ValueError, AttributeError):
+            logger.debug("Failed to convert rembalance to float.")
             rembalance_value = None
+
+        logger.debug(f"Rembalance numeric value: {rembalance_value}")
 
         # Returnăm 'Da' doar dacă rembalance este un număr pozitiv
         if rembalance_value is not None and rembalance_value > 0:
@@ -364,45 +373,92 @@ class FacturaRestantaSensor(HidroelectricaBaseSensor):
         """
         Afișăm detalii adiționale despre factură:
         - 'Total neachitat': Suma totală neachitată din toate facturile.
+        - 'Total credit': Suma totală de credit disponibilă.
         - 'duedate': Data scadenței (dacă există o singură factură relevantă).
         - 'Detalii': Mesaj specific dacă nu există facturi disponibile.
+        - 'billamount': Valoarea totală a facturii, inclusiv semnul negativ dacă este cazul.
         """
         bill_data = self._get_bill_data()
+        logger.debug(f"Bill data in extra_state_attributes: {bill_data}")
+
         if not bill_data:
+            logger.debug("Bill data is None or empty.")
             return {}
 
         result_block = bill_data.get("result", {})
+        logger.debug(f"Result block: {result_block}")
+
         facturi = result_block.get("facturi", [])  # Presupunem că facturile sunt stocate sub această cheie
+        logger.debug(f"Facturi list: {facturi}")
+
         total_neachitat = 0.0
+        total_credit = 0.0
+        total_neachitat_formatted = "0,00"
+        total_credit_formatted = "0,00"
 
-        # Iterăm prin facturi și cumulăm suma neachitată
-        for factura in facturi:
-            rembalance = factura.get("rembalance", "0,00").replace(",", ".")
-            try:
-                total_neachitat += float(rembalance)
-            except ValueError:
-                continue
+        if facturi:
+            # Iterăm prin facturi și cumulăm suma neachitată și creditul
+            for factura in facturi:
+                rembalance_str = factura.get("rembalance", "0,00")
+                rembalance = rembalance_str.replace(",", ".")
+                logger.debug(f"Processing factura rembalance: {rembalance}")
+                try:
+                    rembalance_value = float(rembalance)
+                    if rembalance_value > 0:
+                        total_neachitat += rembalance_value
+                    elif rembalance_value < 0:
+                        total_credit += rembalance_value
+                except ValueError:
+                    logger.debug(f"Skipping invalid rembalance: {rembalance}")
+                    continue
 
-        # Formatăm suma totală neachitată
-        total_neachitat_formatted = f"{total_neachitat:.2f}".replace(".", ",")
-
-        # Construim atributele în funcție de suma neachitată
-        if total_neachitat > 0:
-            return {
-                "Total neachitat": f"{total_neachitat_formatted} lei",
-                "duedate": result_block.get("duedate", "N/A"),  # Poți ajusta să ia prima factură restantă
-                "attribution": ATTRIBUTION,
-            }
+            logger.debug(f"Total neachitat calculated from facturi: {total_neachitat}")
+            logger.debug(f"Total credit calculated from facturi: {total_credit}")
+            total_neachitat_formatted = f"{total_neachitat:.2f}".replace(".", ",")
+            total_credit_formatted = f"{total_credit:.2f}".replace(".", ",")
         else:
-            return {
-                "Total neachitat": "0,00 lei",
-                "Detalii": "Nu există facturi disponibile",
-                "attribution": ATTRIBUTION,
-            }
-        
+            # Dacă nu există facturi, folosește billamount
+            billamount = result_block.get("billamount", "0,00")
+            logger.debug(f"No facturi, using billamount: {billamount}")
+            try:
+                total_neachitat = float(billamount.replace(",", "."))
+                if total_neachitat > 0:
+                    total_neachitat_formatted = billamount
+                elif total_neachitat < 0:
+                    total_credit = total_neachitat
+                    total_credit_formatted = billamount
+            except (ValueError, AttributeError):
+                logger.debug("Failed to convert billamount to float.")
+                total_neachitat = 0.0
+                total_credit = 0.0
+
+        logger.debug(f"Total neachitat calculated: {total_neachitat}")
+        logger.debug(f"Total credit calculated: {total_credit}")
+
+        # Construim atributele
+        attributes = {
+            "attribution": ATTRIBUTION,
+        }
+
+        if total_neachitat > 0:
+            attributes["Total neachitat"] = f"{total_neachitat_formatted} lei"
+            #attributes["duedate"] = result_block.get("duedate", "N/A")  # Poți ajusta să ia prima factură restantă
+        elif total_credit < 0:
+            attributes["Total credit"] = f"{total_credit_formatted} lei"
+            #attributes["duedate"] = result_block.get("duedate", "N/A")  # Poți ajusta dacă este necesar
+
+        if not facturi:
+            # Dacă nu avem facturi, afișăm billamount și detalii
+            #attributes["billamount"] = result_block.get("billamount", "N/A")
+            attributes["Detalii"] = "Nu există facturi individuale disponibile"
+
+        return attributes
+
     def _get_bill_data(self):
         """Returnează sub-dicționarul get_bill (API_URL_GET_BILL)."""
-        return self._acc_data().get("get_bill", {})
+        bill_data = self._acc_data().get("get_bill", {})
+        logger.debug(f"Data returned by _get_bill_data: {bill_data}")
+        return bill_data
 
 
 
