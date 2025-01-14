@@ -86,13 +86,13 @@ alias: Notificare Factură Restantă
 description: Notificare dacă există facturi restante
 trigger:
   - platform: state
-    entity_id: sensor.hidroelectrica_factura_restanta
+    entity_id: sensor.hidroelectrica_factura_restanta_XXXXXXXX
     to: "Da"
 action:
   - service: notify.mobile_app_your_phone
     data:
       title: "Factură Restantă Detectată! ⚡"
-      message: "Aveți o factură restantă în valoare de {{ states('sensor.factura_restanta') }}."
+      message: "Aveți o factură restantă în valoare de {{ states('sensor.hidroelectrica_factura_restanta_XXXXXXXX') }}."
 mode: single
 ```
 
@@ -103,11 +103,11 @@ Afișează datele despre utilizator, facturi restante și istoric plăți pe int
 type: entities
 title: Monitorizare Hidroelectrica România
 entities:
-  - entity: sensor.hidroelectrica_date_utilizator
+  - entity: sensor.hidroelectrica_date_contract_XXXXXXXX
     name: Date Utilizator
-  - entity: sensor.hidroelectrica_factura_restanta
+  - entity: sensor.hidroelectrica_factura_restanta_XXXXXXXX
     name: Factură Restantă
-  - entity: sensor.hidroelectrica_istoric_facturi_achitate
+  - entity: sensor.hidroelectrica_factura_restanta_XXXXXXXX
     name: Istoric Facturi Achitate
 ```
 
