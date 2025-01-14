@@ -20,6 +20,16 @@ Această integrare pentru Home Assistant oferă **monitorizare completă** a dat
       - Țară
       - Ultima actualizare de date
 
+### Senzor `Index curent`:
+  - **🔍 Monitorizare date index**:
+      - Afișează informații detaliate despre indexul curent al contorului (**de moment, indisponibil**).
+  - **📊 Atribute disponibile**:
+      - **Numărul dispozitivului**: ID-ul dispozitivului asociat contorului.
+      - **Tip de contor**: Indică dacă citirea poate fi realizată în perioada curentă.
+      - **Data de început a citirii**: Data de început a perioadei de citire.
+      - **Data de final a citirii**: Data de final a perioadei de citire.
+
+
 
 ### Senzor `Factură restantă`:
   - **🔍 Detalii despre solduri restante**:
