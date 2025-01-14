@@ -25,7 +25,7 @@ Această integrare pentru Home Assistant oferă **monitorizare completă** a dat
       - Afișează informații detaliate despre indexul curent al contorului (**de moment, indisponibil**).
   - **📊 Atribute disponibile**:
       - **Numărul dispozitivului**: ID-ul dispozitivului asociat contorului.
-      - **Tip de contor**: Indică dacă citirea poate fi realizată în perioada curentă.
+      - **Tip de contor**: Indică tipul contorului.
       - **Data de început a citirii**: Data de început a perioadei de citire.
       - **Data de final a citirii**: Data de final a perioadei de citire.
 
