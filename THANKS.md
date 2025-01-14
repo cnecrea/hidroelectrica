@@ -6,22 +6,22 @@ Vreau să le mulțumesc din suflet tuturor celor care m-au susținut și au cont
 
 Le sunt recunoscător următorilor susținători pentru generozitatea lor:
 
-- **Horațiu Slăvescu**: Îți mulțumim pentru munca depusă și sprijinul constant! 💪
-- **Attila**: Apreciem eforturile și contribuțiile tale remarcabile! 😊
-- **Lazar Dan Cristian**: Mulțumim pentru suportul tău continuu și implicare! 😊
-- **Rusu Radu** – Mulțumesc pentru contribuția ta valoroasă! 🙌
-- **Șerbănescu Bogdan** – Apreciez enorm sprijinul tău! 🌟
-- **Someone** – Mulțumesc pentru susținerea ta! 😊
-- **Robert Olteanu** – Mulțumesc din suflet pentru toate contribuțiile tale constante! 🙏
-- **ovydyu1985** – Apreciez sprijinul tău! 💪
-- **Dorin** – Mulțumesc pentru generozitatea ta! 😊
-- **Abulafiab - Bogdan** – Sprijinul tău înseamnă foarte mult pentru mine! 🚀
-- **@Mari** – Mulțumesc pentru contribuția ta valoroasă! 💛
-- **Marius Demian** – Mă bucur enorm să te am alături! 😊
-- **Andrei Bădescu** – Mulțumesc pentru susținerea ta! 🙌
-- **GDaniel** – Apreciez enorm generozitatea ta! 🌟
-- **Tavi** – Mulțumesc pentru sprijinul tău constant! 💪
-- **Cosmin Grigoraș** – Sprijinul tău face o mare diferență! 🚀
+- **Horațiu Slăvescu**
+- **Attila**
+- **Lazar Dan Cristian**
+- **Rusu Radu**
+- **Șerbănescu Bogdan**
+- **Someone**
+- **Robert Olteanu** 
+- **ovydyu1985** 
+- **Dorin** 
+- **Abulafiab - Bogdan**
+- **@Mari**
+- **Marius Demian**
+- **Andrei Bădescu**
+- **GDaniel**
+- **Tavi** 
+- **Cosmin Grigoraș**
 
 ---
 
