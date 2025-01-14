@@ -6,6 +6,9 @@ Vreau să le mulțumesc din suflet tuturor celor care m-au susținut și au cont
 
 Le sunt recunoscător următorilor susținători pentru generozitatea lor:
 
+- **Lazar Dan Cristian**: Mulțumim pentru suportul tău continuu și implicare! 😊
+- **Attila**: Apreciem eforturile și contribuțiile tale remarcabile! 😊
+- **Horațiu Slăvescu**: Îți mulțumim pentru munca depusă și sprijinul constant! 💪
 - **Rusu Radu** – Mulțumesc pentru contribuția ta valoroasă! 🙌
 - **Șerbănescu Bogdan** – Apreciez enorm sprijinul tău! 🌟
 - **Someone** – Mulțumesc pentru susținerea ta! 😊
@@ -19,9 +22,6 @@ Le sunt recunoscător următorilor susținători pentru generozitatea lor:
 - **GDaniel** – Apreciez enorm generozitatea ta! 🌟
 - **Tavi** – Mulțumesc pentru sprijinul tău constant! 💪
 - **Cosmin Grigoraș** – Sprijinul tău face o mare diferență! 🚀
-- **Lazar Dan Cristian**: Mulțumim pentru suportul tău continuu și implicare! 😊
-- **Attila**: Apreciem eforturile și contribuțiile tale remarcabile! 😊
-- **Horațiu Slăvescu**: Îți mulțumim pentru munca depusă și sprijinul constant! 💪
 
 ---
 
