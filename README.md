@@ -6,18 +6,20 @@ Această integrare pentru Home Assistant oferă **monitorizare completă** a dat
 
 ## 🌟 Caracteristici
 
-### Senzor `Date utilizator`:
+### Senzor `Date contract`:
   - **🔍 Monitorizare Generală**:
       - Afișează informații detaliate despre utilizator și cont.
   - **📊 Atribute disponibile**:
-      - ID utilizator
+      - Numele și prenumele
+      - Telefon de contact
       - Număr cont utilitate
-      - Număr cont
-      - Țară
-      - Oraș
+      - Cod loc de consum (NLC)
       - Tip client
+      - Adresa de consum
+      - Localitate
+      - Țară
       - Ultima actualizare de date
-      - Tip contor
+
 
 ### Senzor `Factură restantă`:
   - **🔍 Detalii despre solduri restante**:
@@ -26,13 +28,16 @@ Această integrare pentru Home Assistant oferă **monitorizare completă** a dat
       - Plată restantă (ex. "259.12 lei, depășită cu 1 zi")
       - Total neachitat
 
-### Senzor `Istoric facturi achitate`:
-  - **📚 Monitorizare Istoric**:
-      - Afișează informații despre plățile efectuate.
+### Senzor `Arhivă`:
+  - **📚 Date istorice**:
+    - Afișează plățile lunare pentru fiecare an disponibil.
   - **📊 Atribute disponibile**:
-      - Detalii plăți individuale (ex. "Emisă la data de 19 ianuarie 2024: 168.83 lei")
-      - Total achitat
-      - Număr total de plăți efectuate
+    - **Plăți individuale**: Detalii pentru fiecare plată efectuată.
+      - Exemplu: `Plată #1 factură luna octombrie: 118,83 lei`
+    - **Plăți efectuate**: Numărul total de plăți din anul curent.
+      - Exemplu: `Plăți efectuate: 13`
+    - **Total suma achitată**: Suma totală achitată pentru anul curent.
+      - Exemplu: `Total suma achitată: 2342.50 lei`
 
 ---
 
