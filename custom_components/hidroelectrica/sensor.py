@@ -363,8 +363,10 @@ class FacturaRestantaSensor(HidroelectricaBaseSensor):
         logger.debug(f"Rembalance numeric value: {rembalance_value}")
 
         # Returnăm 'Da' doar dacă rembalance este un număr pozitiv
-        if rembalance_value is not None and rembalance_value > 0:
+        if rembalance_value > 0:
             return "Da"
+        elif rembalance_value < 0:
+            return "Sold"
         else:
             return "Nu"
 
