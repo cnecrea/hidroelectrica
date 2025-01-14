@@ -65,7 +65,7 @@ Această integrare pentru Home Assistant oferă **monitorizare completă** a dat
 ## 🚀 Instalare
 
 ### 💡 Instalare prin HACS:
-1. Adaugă [depozitul personalizat](https://github.com/cnecrea/hidroelectrica) în HACS. 🛠️
+1. Adaugă [depozitul personalizat](https://github.com/cnecrea/hidroelectrica) în HACS. 🛠️  [![Deschide instanța ta Home Assistant și accesează un depozit din cadrul magazinului comunitar Home Assistant (Home Assistant Community Store).](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=cnecrea&repository=hidroelectrica&category=Integration)
 2. Caută integrarea **Hidroelectrica România** și instaleaz-o. ✅
 3. Repornește Home Assistant și configurează integrarea. 🔄
 
