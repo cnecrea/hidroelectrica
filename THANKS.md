@@ -19,6 +19,9 @@ Le sunt recunoscător următorilor susținători pentru generozitatea lor:
 - **GDaniel** – Apreciez enorm generozitatea ta! 🌟
 - **Tavi** – Mulțumesc pentru sprijinul tău constant! 💪
 - **Cosmin Grigoraș** – Sprijinul tău face o mare diferență! 🚀
+- **Lazar Dan Cristian**: Mulțumim pentru suportul tău continuu și implicare! 😊
+- **Attila**: Apreciem eforturile și contribuțiile tale remarcabile! 😊
+- **Horațiu Slăvescu**: Îți mulțumim pentru munca depusă și sprijinul constant! 💪
 
 ---
 
