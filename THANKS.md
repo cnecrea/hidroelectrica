@@ -10,7 +10,6 @@ Le sunt recunoscător următorilor susținători pentru generozitatea lor:
 - **Lazar Dan Cristian**
 - **Horațiu Slăvescu**
 - **Attila**
-- **Lazar Dan Cristian**
 - **Rusu Radu**
 - **Șerbănescu Bogdan**
 - **Someone**
