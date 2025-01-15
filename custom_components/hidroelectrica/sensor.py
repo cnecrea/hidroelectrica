@@ -10,8 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components.sensor import SensorStateClass
 from .const import DOMAIN, ATTRIBUTION
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 def _extract_year_from_dd_mm_yyyy(date_str: str) -> int:
     """
@@ -341,33 +340,36 @@ class FacturaRestantaSensor(HidroelectricaBaseSensor):
         sau 'Nu' dacă factura este achitată integral sau are un sold negativ.
         """
         bill_data = self._get_bill_data()
-        logger.debug(f"Bill data in native_value: {bill_data}")
+        _LOGGER.debug(f"Bill data in native_value: {bill_data}")
 
         if not bill_data:
-            logger.debug("Bill data is None or empty.")
+            _LOGGER.debug("Bill data is None or empty.")
             return None
 
         result_block = bill_data.get("result", {})
         rembalance = result_block.get("rembalance", "N/A")
 
-        logger.debug(f"Result block: {result_block}")
-        logger.debug(f"Rembalance value: {rembalance}")
+        _LOGGER.debug(f"Result block: {result_block}")
+        _LOGGER.debug(f"Rembalance value: {rembalance}")
 
         # Convertim rembalance în float pentru verificare, dacă este posibil
         try:
             rembalance_value = float(rembalance.replace(",", "."))
         except (ValueError, AttributeError):
-            logger.debug("Failed to convert rembalance to float.")
+            _LOGGER.debug("Failed to convert rembalance to float.")
             rembalance_value = None
 
-        logger.debug(f"Rembalance numeric value: {rembalance_value}")
+        _LOGGER.debug(f"Rembalance numeric value: {rembalance_value}")
 
-        # Returnăm 'Da' doar dacă rembalance este un număr pozitiv
-        if rembalance_value > 0:
-            return "Da"
-        elif rembalance_value < 0:
-            return "Sold"
+        # Verificăm dacă rembalance_value este valid înainte de comparație
+        if rembalance_value is not None:
+            if rembalance_value > 0:
+                return "Da"
+            elif rembalance_value < 0:
+                return "Sold"
         else:
+            # Dacă rembalance_value este None, tratăm acest caz
+            _LOGGER.debug("Rembalance value is None, returning default 'Nu'")
             return "Nu"
 
     @property
@@ -381,17 +383,17 @@ class FacturaRestantaSensor(HidroelectricaBaseSensor):
         - 'billamount': Valoarea totală a facturii, inclusiv semnul negativ dacă este cazul.
         """
         bill_data = self._get_bill_data()
-        logger.debug(f"Bill data in extra_state_attributes: {bill_data}")
+        _LOGGER.debug(f"Bill data in extra_state_attributes: {bill_data}")
 
         if not bill_data:
-            logger.debug("Bill data is None or empty.")
+            _LOGGER.debug("Bill data is None or empty.")
             return {}
 
         result_block = bill_data.get("result", {})
-        logger.debug(f"Result block: {result_block}")
+        _LOGGER.debug(f"Result block: {result_block}")
 
         facturi = result_block.get("facturi", [])  # Presupunem că facturile sunt stocate sub această cheie
-        logger.debug(f"Facturi list: {facturi}")
+        _LOGGER.debug(f"Facturi list: {facturi}")
 
         total_neachitat = 0.0
         total_credit = 0.0
@@ -403,7 +405,7 @@ class FacturaRestantaSensor(HidroelectricaBaseSensor):
             for factura in facturi:
                 rembalance_str = factura.get("rembalance", "0,00")
                 rembalance = rembalance_str.replace(",", ".")
-                logger.debug(f"Processing factura rembalance: {rembalance}")
+                _LOGGER.debug(f"Processing factura rembalance: {rembalance}")
                 try:
                     rembalance_value = float(rembalance)
                     if rembalance_value > 0:
@@ -411,17 +413,17 @@ class FacturaRestantaSensor(HidroelectricaBaseSensor):
                     elif rembalance_value < 0:
                         total_credit += rembalance_value
                 except ValueError:
-                    logger.debug(f"Skipping invalid rembalance: {rembalance}")
+                    _LOGGER.debug(f"Skipping invalid rembalance: {rembalance}")
                     continue
 
-            logger.debug(f"Total neachitat calculated from facturi: {total_neachitat}")
-            logger.debug(f"Total credit calculated from facturi: {total_credit}")
+            _LOGGER.debug(f"Total neachitat calculated from facturi: {total_neachitat}")
+            _LOGGER.debug(f"Total credit calculated from facturi: {total_credit}")
             total_neachitat_formatted = f"{total_neachitat:.2f}".replace(".", ",")
             total_credit_formatted = f"{total_credit:.2f}".replace(".", ",")
         else:
             # Dacă nu există facturi, folosește billamount
             billamount = result_block.get("billamount", "0,00")
-            logger.debug(f"No facturi, using billamount: {billamount}")
+            _LOGGER.debug(f"No facturi, using billamount: {billamount}")
             try:
                 total_neachitat = float(billamount.replace(",", "."))
                 if total_neachitat > 0:
@@ -430,12 +432,12 @@ class FacturaRestantaSensor(HidroelectricaBaseSensor):
                     total_credit = total_neachitat
                     total_credit_formatted = billamount
             except (ValueError, AttributeError):
-                logger.debug("Failed to convert billamount to float.")
+                _LOGGER.debug("Failed to convert billamount to float.")
                 total_neachitat = 0.0
                 total_credit = 0.0
 
-        logger.debug(f"Total neachitat calculated: {total_neachitat}")
-        logger.debug(f"Total credit calculated: {total_credit}")
+        _LOGGER.debug(f"Total neachitat calculated: {total_neachitat}")
+        _LOGGER.debug(f"Total credit calculated: {total_credit}")
 
         # Construim atributele
         attributes = {
@@ -459,7 +461,7 @@ class FacturaRestantaSensor(HidroelectricaBaseSensor):
     def _get_bill_data(self):
         """Returnează sub-dicționarul get_bill (API_URL_GET_BILL)."""
         bill_data = self._acc_data().get("get_bill", {})
-        logger.debug(f"Data returned by _get_bill_data: {bill_data}")
+        _LOGGER.debug(f"Data returned by _get_bill_data: {bill_data}")
         return bill_data
 
 
