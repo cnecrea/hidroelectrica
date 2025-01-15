@@ -65,13 +65,13 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
             await self.hass.async_add_executor_job(self.api.login_if_needed)
 
             # 2. Obținem lista de conturi (coduri de încasare) => utility_accounts
-            utility_accounts = self.api.get_utility_accounts()
+            utility_accounts = self.api.get_utility_accounts() or []
             self.data["utility_accounts"] = utility_accounts
 
             # 2.1 Obținem datele brute din ValidateUserLogin (toate rândurile) 
             #     și din GetUserSetting (raw).
-            validate_user_login_rows = self.api.get_validate_user_login_data()  # list[dict]
-            raw_user_setting_data = self.api.get_raw_user_setting_data()        # dict cu Table1, Table2
+            validate_user_login_rows = self.api.get_validate_user_login_data() or []
+            raw_user_setting_data = self.api.get_raw_user_setting_data() or {}
 
             # Mapăm sub-dicționare => UAN -> row
             user_setting_map = self._map_user_setting_rows_by_uan(raw_user_setting_data)
@@ -102,20 +102,19 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
                 # 3.3 Apele endpoint-urilor sincrone
                 resp_multi_meter = await self.hass.async_add_executor_job(
                     self.api.get_multi_meter_details, uan, acc_no
-                )
+                ) or {}
 
                 resp_meter_value = await self.hass.async_add_executor_job(
                     self.api.get_current_meter_value, uan, acc_no
-                )
+                ) or {}
 
                 resp_window_dates = await self.hass.async_add_executor_job(
                     self.api.get_window_dates_enc, uan, acc_no
-                )
+                ) or {}
 
                 resp_bill = await self.hass.async_add_executor_job(
                     self.api.get_current_bill, uan, acc_no
-                )
-
+                ) or {}
 
                 # Calculăm intervalul de date dinamic
                 end_date = datetime.now()  # Data curentă
@@ -127,12 +126,11 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
                 # Istoric facturi
                 resp_billing_history = await self.hass.async_add_executor_job(
                     self.api.get_bill_history, uan, acc_no, start_date_str, end_date_str
-                )
-
+                ) or {}
 
                 resp_usage_gen = await self.hass.async_add_executor_job(
                     self.api.get_usage_generation, uan, acc_no
-                )
+                ) or {"result": {"Data": {"objUsageGenerationResultSetTwo": []}}}
 
                 # Obținem anul curent
                 current_year = datetime.now().year
@@ -140,7 +138,7 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
 
                 # Navigăm în structura JSON
                 gen_data = resp_usage_gen.get("result", {}).get("Data", {})
-                gen_list = gen_data.get("objUsageGenerationResultSetTwo", [])
+                gen_list = gen_data.get("objUsageGenerationResultSetTwo", []) or []
 
                 # Construim o listă filtrată, reținând doar item-urile cu Year >= cutoff_year
                 filtered_list = []
