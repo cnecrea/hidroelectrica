@@ -6,6 +6,7 @@ Vreau să le mulțumesc din suflet tuturor celor care m-au susținut și au cont
 
 Le sunt recunoscător următorilor susținători pentru generozitatea lor:
 
+- **bored_mthfkr**
 - **Sebastian**
 - **Adrian Crișan**
 - **Lazar Dan Cristian**
@@ -18,7 +19,7 @@ Le sunt recunoscător următorilor susținători pentru generozitatea lor:
 - **ovydyu1985** 
 - **Dorin** 
 - **Abulafiab - Bogdan**
-- **@Mari**
+- **Mari**
 - **Marius Demian**
 - **Andrei Bădescu**
 - **GDaniel**
