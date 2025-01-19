@@ -1,0 +1,59 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Hidroelectrica Configuration",
+                "description": "Enter your credentials for the Hidroelectrica account.",
+                "data": {
+                    "username": "Username",
+                    "password": "Password",
+                    "update_interval": "Update interval (seconds)"
+                }
+            }
+        },
+        "error": {
+            "auth_failed": "Authentication failed. Check your username and password.",
+            "connection_error": "Unable to connect to the Hidroelectrica server."
+        },
+        "abort": {
+            "already_configured": "This integration is already configured.",
+            "no_data": "No data was retrieved from the server."
+        },
+        "options": {
+            "step": {
+                "init": {
+                    "title": "Hidroelectrica Options",
+                    "description": "Set the update interval.",
+                    "data": {
+                        "update_interval": "Update interval (seconds)"
+                    }
+                }
+            }
+        }
+    },
+    "entity": {
+        "sensor": {
+            "default": {
+                "name": "Hidroelectrica Sensor",
+                "state": "State"
+            }
+        }
+    },
+    "system_health": {
+        "title": "Hidroelectrica System Health",
+        "info": {
+            "api_endpoint_reachable": "API endpoint reachable"
+        }
+    },
+    "services": {
+        "reload": {
+            "name": "Reload Integration",
+            "description": "Reload the Hidroelectrica integration configuration."
+        }
+    },
+    "device_automation": {
+        "trigger_type": {
+            "update_successful": "Update successful"
+        }
+    }
+}
