@@ -1,0 +1,59 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Configuration de Hidroelectrica",
+                "description": "Entrez vos identifiants pour le compte Hidroelectrica.",
+                "data": {
+                    "username": "Nom d'utilisateur",
+                    "password": "Mot de passe",
+                    "update_interval": "Intervalle de mise à jour (secondes)"
+                }
+            }
+        },
+        "error": {
+            "auth_failed": "Échec de l'authentification. Vérifiez votre nom d'utilisateur et votre mot de passe.",
+            "connection_error": "Impossible de se connecter au serveur Hidroelectrica."
+        },
+        "abort": {
+            "already_configured": "Cette intégration est déjà configurée.",
+            "no_data": "Aucune donnée n'a été récupérée depuis le serveur."
+        },
+        "options": {
+            "step": {
+                "init": {
+                    "title": "Options de Hidroelectrica",
+                    "description": "Définissez l'intervalle de mise à jour.",
+                    "data": {
+                        "update_interval": "Intervalle de mise à jour (secondes)"
+                    }
+                }
+            }
+        }
+    },
+    "entity": {
+        "sensor": {
+            "default": {
+                "name": "Capteur Hidroelectrica",
+                "state": "État"
+            }
+        }
+    },
+    "system_health": {
+        "title": "Santé du Système Hidroelectrica",
+        "info": {
+            "api_endpoint_reachable": "Point d'accès API accessible"
+        }
+    },
+    "services": {
+        "reload": {
+            "name": "Recharger l'intégration",
+            "description": "Rechargez la configuration de l'intégration Hidroelectrica."
+        }
+    },
+    "device_automation": {
+        "trigger_type": {
+            "update_successful": "Mise à jour réussie"
+        }
+    }
+}
