@@ -1,0 +1,37 @@
+---
+name: HACS Combined Jobs
+
+on:
+  push:
+  pull_request:
+  release:
+    types:
+      - published
+  schedule:
+    - cron: "0 0 * * *" 
+
+permissions:
+  contents: read
+  packages: read
+  statuses: write
+
+jobs:
+  validate:
+    name: Hassfest Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Run Hassfest
+        uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    name: HACS Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Run HACS Action
+        uses: hacs/action@main
+        with:
+          category: "integration" 
