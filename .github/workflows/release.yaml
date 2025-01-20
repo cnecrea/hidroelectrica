@@ -1,0 +1,104 @@
+name: Creează lansare de tip draft
+
+on:
+  workflow_dispatch:  # Permite rularea manuală a workflow-ului
+
+jobs:
+  release:
+    name: Creează Lansare de tip draft
+    runs-on: ubuntu-22.04  # Ubuntu 22.04 este stabil și suportă Python 3.10
+
+    steps:
+      # 1. Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Set up Python (versiune compatibilă)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'  # Versiune stabilă și compatibilă
+
+      # 3. Update manifest.json version
+      - name: Update manifest.json version
+        id: update_manifest
+        run: |
+          # Verifică dacă jq este instalat
+          if ! command -v jq &> /dev/null; then
+            echo "Installing jq..."
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+          # Definim calea către manifest.json
+          MANIFEST_PATH="custom_components/hidroelectrica/manifest.json"
+
+          # Verificăm dacă fișierul există
+          if [ ! -f "$MANIFEST_PATH" ]; then
+            echo "Error: manifest.json not found at $MANIFEST_PATH"
+            exit 1
+          fi
+
+          # Citește versiunea actuală
+          VERSION=$(jq -r '.version' "$MANIFEST_PATH")
+          echo "Current version: $VERSION"
+          
+          # Calculăm noua versiune (major.minor.patch)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          PATCH=$((PATCH + 1))
+
+          # Dacă patch-ul depășește 9, incrementăm minor-ul și resetăm patch-ul
+          if [ "$PATCH" -ge 10 ]; then
+            PATCH=0
+            MINOR=$((MINOR + 1))
+          fi
+
+          # Setăm noua versiune
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: $NEW_VERSION"
+          
+          # Actualizează manifest.json
+          jq --arg version "$NEW_VERSION" '.version = $version' "$MANIFEST_PATH" > manifest.tmp && mv manifest.tmp "$MANIFEST_PATH"
+          
+          # Setează noua versiune ca variabilă de mediu
+          echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
+
+      # 4. Commit și push modificările folosind PAT
+      - name: Commit changes and push
+        env:
+          PAT: ${{ secrets.PAT_TOKEN }}  # Token-ul salvat ca secret
+        run: |
+          # Configurare GitHub Actions bot
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Setează URL-ul remote pentru autentificare cu token
+          git remote set-url origin https://x-access-token:${PAT}@github.com/cnecrea/yaml.git
+          
+          # Adaugă și face commit la modificări
+          git add custom_components/hidroelectrica/manifest.json
+          git commit -m "Update version to ${{ env.new_version }}"
+          
+          # Push la modificări
+          git push origin HEAD
+
+      # 5. Creează un fișier .zip doar cu conținutul folderului hidroelectrica
+      - name: Create ZIP Archive
+        run: |
+          mkdir -p dist
+          cd custom_components/hidroelectrica
+          zip -r ../../dist/hidroelectrica.zip ./*
+
+      # 6. Creează un release pe GitHub ca draft
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "${{ env.new_version }}"  # Creează un tag
+          name: "${{ env.new_version }}"  # Nume pentru release
+          body: |
+            ## Lansare de tip draft
+            - Această lansare a fost generată automat de GitHub Actions.
+            - Verificați conținutul înainte de publicare.
+          files: dist/hidroelectrica.zip  # Include fișierul ZIP în release
+          draft: true  # Creează release-ul ca draft
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Token-ul implicit GitHub
