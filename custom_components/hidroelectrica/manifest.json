@@ -1,15 +1,12 @@
 {
-    "dependencies": [],
-    "requirements": [],
-    "iot_class": "cloud_polling",
-    "config_flow": true,
     "domain": "hidroelectrica",
     "name": "Hidroelectrica România",
-    "version": "2.4.0",
-    "documentation": "https://github.com/cnecrea/hidroelectrica",
-    "issue_tracker": "https://github.com/cnecrea/hidroelectrica/issues",
     "codeowners": ["@cnecrea"],
-    "translations": "translations",
-    "platforms": ["sensor"],
-    "icon": "custom_components/hidroelectrica/icon.png"
+    "config_flow": true,
+    "dependencies": [],
+    "documentation": "https://github.com/cnecrea/hidroelectrica",
+    "iot_class": "cloud_polling",
+    "issue_tracker": "https://github.com/cnecrea/hidroelectrica/issues",
+    "requirements": [],
+    "version": "2.4.0",
 }
