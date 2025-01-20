@@ -72,7 +72,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
           # Setează URL-ul remote pentru autentificare cu token
-          git remote set-url origin https://x-access-token:${PAT}@github.com/cnecrea/yaml.git
+          git remote set-url origin https://x-access-token:${PAT}@github.com/cnecrea/hidroelectrica.git
           
           # Adaugă și face commit la modificări
           git add custom_components/hidroelectrica/manifest.json
