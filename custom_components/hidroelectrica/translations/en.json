@@ -18,24 +18,16 @@
         "abort": {
             "already_configured": "This integration is already configured.",
             "no_data": "No data was retrieved from the server."
-        },
-        "options": {
-            "step": {
-                "init": {
-                    "title": "Hidroelectrica Options",
-                    "description": "Set the update interval.",
-                    "data": {
-                        "update_interval": "Update interval (seconds)"
-                    }
-                }
-            }
         }
     },
     "entity": {
         "sensor": {
             "default": {
                 "name": "Hidroelectrica Sensor",
-                "state": "State"
+                "state": {
+                    "on": "Online",
+                    "off": "Offline"
+                }
             }
         }
     },
