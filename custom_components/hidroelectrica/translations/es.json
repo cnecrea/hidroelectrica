@@ -18,24 +18,16 @@
         "abort": {
             "already_configured": "Esta integración ya está configurada.",
             "no_data": "No se recuperaron datos del servidor."
-        },
-        "options": {
-            "step": {
-                "init": {
-                    "title": "Opciones de Hidroelectrica",
-                    "description": "Configure el intervalo de actualización.",
-                    "data": {
-                        "update_interval": "Intervalo de actualización (segundos)"
-                    }
-                }
-            }
         }
     },
     "entity": {
         "sensor": {
             "default": {
                 "name": "Sensor de Hidroelectrica",
-                "state": "Estado"
+                "state": {
+                    "active": "Activo",
+                    "inactive": "Inactivo"
+                }
             }
         }
     },
