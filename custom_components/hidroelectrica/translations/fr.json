@@ -18,24 +18,16 @@
         "abort": {
             "already_configured": "Cette intégration est déjà configurée.",
             "no_data": "Aucune donnée n'a été récupérée depuis le serveur."
-        },
-        "options": {
-            "step": {
-                "init": {
-                    "title": "Options de Hidroelectrica",
-                    "description": "Définissez l'intervalle de mise à jour.",
-                    "data": {
-                        "update_interval": "Intervalle de mise à jour (secondes)"
-                    }
-                }
-            }
         }
     },
     "entity": {
         "sensor": {
             "default": {
                 "name": "Capteur Hidroelectrica",
-                "state": "État"
+                "state": {
+                    "active": "Actif",
+                    "inactive": "Inactif"
+                }
             }
         }
     },
