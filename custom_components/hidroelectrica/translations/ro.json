@@ -31,12 +31,6 @@
             }
         }
     },
-    "system_health": {
-        "title": "Sănătatea sistemului Hidroelectrica",
-        "info": {
-            "api_endpoint_reachable": "Endpoint API accesibil"
-        }
-    },
     "services": {
         "reload": {
             "name": "Reîncarcă integrarea",
