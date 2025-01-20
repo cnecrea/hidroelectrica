@@ -26,16 +26,33 @@ body:
     validations:
       required: true
 
+  - type: markdown
+    attributes:
+      value: >
+        &nbsp;
+
+  - type: markdown
+    attributes:
+      value: >
+        ---
+
   - type: textarea
     id: loguri
     attributes:
       label: Loguri relevante
-      description: >
+      description: |
         Adăugați logurile relevante pentru problemă. Utilizați formatul următor:
         ```yaml
         # Exemplu:
         2025-01-14 03:08:37.818 ERROR (MainThread) [custom_components.hidroelectrica.sensor] Eroare la parsarea sumei: 1.580,10
         ```
+
+        Dacă nu știți cum să activați modul debug și să colectați logurile relevante,
+        vă rugăm să consultați [ghidul pentru debugging](https://github.com/cnecrea/hidroelectrica/blob/main/DEBUG.md).
+        
+        După ce ați activat modul debug, reporniți Home Assistant și reproduceți problema,
+        apoi copiați logurile generate din fișierul `home-assistant.log`.
+
       value: |
         ```yaml
         # ↑↓ Introduceți logurile aici, nu ștergeți liniile indicate cu săgeți
