@@ -31,12 +31,6 @@
             }
         }
     },
-    "system_health": {
-        "title": "Santé du Système Hidroelectrica",
-        "info": {
-            "api_endpoint_reachable": "Point d'accès API accessible"
-        }
-    },
     "services": {
         "reload": {
             "name": "Recharger l'intégration",
