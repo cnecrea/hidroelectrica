@@ -18,24 +18,16 @@
         "abort": {
             "already_configured": "Această integrare este deja configurată.",
             "no_data": "Nu au fost obținute date de la server."
-        },
-        "options": {
-            "step": {
-                "init": {
-                    "title": "Opțiuni Hidroelectrica",
-                    "description": "Setați intervalul de actualizare.",
-                    "data": {
-                        "update_interval": "Interval actualizare (secunde)"
-                    }
-                }
-            }
         }
     },
     "entity": {
         "sensor": {
             "default": {
                 "name": "Hidroelectrica Sensor",
-                "state": "Stare"
+                "state": {
+                    "active": "Activ",
+                    "inactive": "Inactiv"
+                }
             }
         }
     },
