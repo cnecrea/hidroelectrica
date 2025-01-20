@@ -1,17 +1,4 @@
 {
     "name": "Hidroelectrica România",
-    "country": ["ro"],
-    "domain": "hidroelectrica",
-    "codeowners": ["@cnecrea"],
-    "requirements": [],
-    "iot_class": "cloud_polling",
-    "config_flow": true,
-    "documentation": "https://github.com/cnecrea/hidroelectrica",
-    "issue_tracker": "https://github.com/cnecrea/hidroelectrica/issues",
-    "render_readme": true,
-    "persistent_directory": "userfiles",
-    "content_in_root": false,
-    "version": "2.4.0",
-    "zip_release": true,
-    "filename": "hidroelectrica.zip"
+    "render_readme": true
 }
