@@ -31,12 +31,6 @@
             }
         }
     },
-    "system_health": {
-        "title": "Hidroelectrica System Health",
-        "info": {
-            "api_endpoint_reachable": "API endpoint reachable"
-        }
-    },
     "services": {
         "reload": {
             "name": "Reload Integration",
