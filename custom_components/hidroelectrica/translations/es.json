@@ -31,12 +31,6 @@
             }
         }
     },
-    "system_health": {
-        "title": "Estado del Sistema de Hidroelectrica",
-        "info": {
-            "api_endpoint_reachable": "Punto de acceso API accesible"
-        }
-    },
     "services": {
         "reload": {
             "name": "Recargar integración",
