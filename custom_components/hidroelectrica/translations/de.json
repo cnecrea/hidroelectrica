@@ -31,12 +31,6 @@
             }
         }
     },
-    "system_health": {
-        "title": "Hidroelectrica Systemzustand",
-        "info": {
-            "api_endpoint_reachable": "API-Endpunkt erreichbar"
-        }
-    },
     "services": {
         "reload": {
             "name": "Integration neu laden",
