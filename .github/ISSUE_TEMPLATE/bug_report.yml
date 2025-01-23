@@ -53,10 +53,7 @@ body:
         După ce ați activat modul debug, reporniți Home Assistant și reproduceți problema,
         apoi copiați logurile generate din fișierul `home-assistant.log`.
 
-      value: |
-        ```yaml
-        # ↑↓ Introduceți logurile aici, nu ștergeți liniile indicate cu săgeți
-        ```
+      render: yaml
     validations:
       required: true
 
