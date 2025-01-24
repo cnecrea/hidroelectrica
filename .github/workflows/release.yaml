@@ -1,7 +1,17 @@
 name: Creează lansare de tip draft
 
 on:
-  workflow_dispatch:  # Permite rularea manuală a workflow-ului
+  workflow_dispatch:  # Permite rularea manuală a workflow-ului cu parametri
+    inputs:
+      increment_type:
+        description: "Tipul de incrementare al versiunii (major/minor/patch)"
+        required: true
+        default: "patch"  # Implicit se incrementează PATCH
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
 
 jobs:
   release:
@@ -42,17 +52,28 @@ jobs:
           VERSION=$(jq -r '.version' "$MANIFEST_PATH")
           echo "Current version: $VERSION"
           
-          # Calculăm noua versiune (major.minor.patch)
+          # Sparge versiunea în MAJOR, MINOR și PATCH
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          PATCH=$((PATCH + 1))
 
-          # Dacă patch-ul depășește 9, incrementăm minor-ul și resetăm patch-ul
-          if [ "$PATCH" -ge 10 ]; then
+          # Verificăm tipul de incrementare
+          INCREMENT_TYPE="${{ github.event.inputs.increment_type }}"
+          echo "Increment type: $INCREMENT_TYPE"
+
+          if [ "$INCREMENT_TYPE" = "major" ]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
             PATCH=0
+          elif [ "$INCREMENT_TYPE" = "minor" ]; then
             MINOR=$((MINOR + 1))
+            PATCH=0
+          elif [ "$INCREMENT_TYPE" = "patch" ]; then
+            PATCH=$((PATCH + 1))
+          else
+            echo "Invalid increment type: $INCREMENT_TYPE. Use 'major', 'minor', or 'patch'."
+            exit 1
           fi
 
-          # Setăm noua versiune
+          # Creează noua versiune
           NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
           echo "New version: $NEW_VERSION"
           
@@ -68,11 +89,11 @@ jobs:
           PAT: ${{ secrets.PAT_TOKEN }}  # Token-ul salvat ca secret
         run: |
           # Configurare GitHub Actions bot
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "hidroelectrica-release-bot"
+          git config user.email "hidroelectrica-bot@users.noreply.github.com"
           
           # Setează URL-ul remote pentru autentificare cu token
-          git remote set-url origin https://x-access-token:${PAT}@github.com/cnecrea/myelectrica.git
+          git remote set-url origin https://x-access-token:${PAT}@github.com/cnecrea/hidroelectrica.git
           
           # Adaugă și face commit la modificări
           git add custom_components/hidroelectrica/manifest.json
