@@ -12,8 +12,10 @@ body:
     id: descriere
     attributes:
       label: Descrieți problema
-      description: Explicați clar ce s-a întâmplat, inclusiv pașii pentru a reproduce problema.
-      placeholder: "Descrieți aici problema"
+      description: |
+        Explicați clar ce s-a întâmplat, inclusiv pașii pentru a reproduce problema. 
+        **Nu introduceți logurile aici.** Logurile trebuie raportate în secțiunea dedicată de mai jos.
+      placeholder: "Descrieți aici problema (fără loguri)"
     validations:
       required: true
 
