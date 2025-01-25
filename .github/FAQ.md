@@ -3,6 +3,7 @@
 # Întrebări frecvente
 - [Cum să adaug integrarea în Home Assistant?](#cum-să-adaug-integrarea-în-home-assistant)
 - [Observ în loguri "Am primit 401". De ce?](#observ-în-loguri-am-primit-401-de-ce)
+- [De ce primesc o eroare 500 (Internal Server Error)?](#de-ce-primesc-o-eroare-500-internal-server-error)
 
 
 ## Cum să adaug integrarea în Home Assistant?
@@ -49,6 +50,10 @@ HACS (Home Assistant Community Store) permite instalarea și gestionarea integr�
 
 ## Observ în loguri "Am primit 401". De ce?
 
+Pentru a reveni la începutul paginii, [apăsați aici](#top).
+
+
+**Răspuns:**  
 Aceasta este o situație complet normală. Mesajul "401 Unauthorized" apare atunci când sesiunea curentă expiră, iar integrarea încearcă să acceseze resurse fără a avea o sesiune validă. Orice sesiune are un timp limitat pentru a asigura securitatea și, atunci când expiră, integrarea inițiază automat o reautentificare.
 
 ### De ce expiră sesiunea?
@@ -63,3 +68,23 @@ Aceasta este o situație complet normală. Mesajul "401 Unauthorized" apare atun
   3. Serverul funcționează corect (poți verifica acest lucru cu alte metode, dacă este necesar).
 
 Acest comportament este normal și de așteptat, așa că, în general, nu este nevoie de nicio acțiune din partea ta.
+
+---
+
+## De ce primesc o eroare 500 (Internal Server Error)?
+
+Pentru a reveni la începutul paginii, [apăsați aici](#top).
+
+
+O eroare 500 (Internal Server Error) indică faptul că serverul Hidroelectrica întâmpină o problemă internă atunci când încearcă să proceseze o cerere. Aceasta este o problemă care apare **pe partea serverului** și nu are legătură cu modul în care cererea a fost trimisă de integrare.
+
+### O analogie simplă:
+Este ca și cum încercați să sunați pe cineva, dar rețeaua telefonică e căzută. Telefonul dumneavoastră funcționează perfect, dar problema este la operatorul rețelei.
+
+### Ce se întâmplă în acest caz?
+1. Integrarea Home Assistant trimite o cerere validă către serverul Hidroelectrica.
+2. Serverul Hidroelectrica întâmpină o problemă internă și nu poate procesa cererea.
+3. Serverul răspunde cu o eroare 500, iar integrarea doar raportează acest răspuns.
+
+### Ce pot face?
+Din păcate, eroarea 500 este o problemă pe care doar echipa care administrează serverele Hidroelectrica o poate rezolva. Integrarea Home Assistant funcționează corect și nu este cauza acestei probleme.
