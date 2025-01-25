@@ -6,6 +6,16 @@ body:
   - type: markdown
     attributes:
       value: >
+        ⚠️ **ATENȚIE:**  
+        Înainte de a raporta o problemă, vă rugăm să verificați secțiunea [FAQ.md](https://github.com/cnecrea/hidroelectrica/blob/main/FAQ.md) pentru a vedea dacă problema este deja explicată sau are o soluție.  
+
+        Acest lucru ne ajută să evităm raportările duplicate și să rezolvăm problemele mai eficient.  
+        
+        Dacă problema persistă, completați informațiile de mai jos.
+        
+  - type: markdown
+    attributes:
+      value: >
         Vă rugăm să completați informațiile de mai jos pentru a ne ajuta să înțelegem problema și să o rezolvăm mai rapid.
 
   - type: textarea
