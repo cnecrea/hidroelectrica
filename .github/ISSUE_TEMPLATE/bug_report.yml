@@ -8,17 +8,22 @@ body:
       value: >
         ⚠️ **ATENȚIE:** ⚠️
 
-
         Înainte de a raporta o problemă, te rog să verifici secțiunea [FAQ.md](https://github.com/cnecrea/hidroelectrica/blob/main/FAQ.md) pentru a vedea dacă problema este deja explicată sau are o soluție.  
 
         Acest lucru mă ajută să evit raportările duplicate și să rezolv problemele mai eficient.  
         
         Dacă problema persistă, completează informațiile de mai jos.
         
-  - type: markdown
+  - type: dropdown
+    id: citit_faq
     attributes:
-      value: >
-        Te rog să completezi informațiile de mai jos pentru a mă ajuta să înțeleg problema și să o rezolv mai rapid.
+      label: Ați citit secțiunea FAQ.md?
+      description: Te rog să confirmi dacă ai citit fișierul FAQ.md înainte de a raporta problema.
+      options:
+        - "Nu, nu am citit secțiunea FAQ.md."
+        - "Da, am citit secțiunea FAQ.md și nu am găsit răspunsul la problema mea."
+    validations:
+      required: true
 
   - type: textarea
     id: descriere
