@@ -4,6 +4,7 @@
 - [Cum să adaug integrarea în Home Assistant?](#cum-să-adaug-integrarea-în-home-assistant)
 - [Observ în loguri "Am primit 401". De ce?](#observ-în-loguri-am-primit-401-de-ce)
 - [De ce primesc o eroare 500 (Internal Server Error)?](#de-ce-primesc-o-eroare-500-internal-server-error)
+- [Indexul aduce valoarea 0. De ce?](#indexul-aduce-valoarea-0-de-ce)
 
 
 ## Cum să adaug integrarea în Home Assistant?
@@ -76,6 +77,7 @@ Acest comportament este normal și de așteptat, așa că, în general, nu este 
 Pentru a reveni la începutul paginii, [apăsați aici](#top).
 
 
+**Răspuns:**  
 O eroare 500 (Internal Server Error) indică faptul că serverul Hidroelectrica întâmpină o problemă internă atunci când încearcă să proceseze o cerere. Aceasta este o problemă care apare **pe partea serverului** și nu are legătură cu modul în care cererea a fost trimisă de integrare.
 
 ### O analogie simplă:
@@ -88,3 +90,69 @@ Este ca și cum încercați să sunați pe cineva, dar rețeaua telefonică e c�
 
 ### Ce pot face?
 Din păcate, eroarea 500 este o problemă pe care doar echipa care administrează serverele Hidroelectrica o poate rezolva. Integrarea Home Assistant funcționează corect și nu este cauza acestei probleme.
+
+---
+
+## Indexul aduce valoarea 0. De ce?
+
+Pentru a reveni la începutul paginii, [apăsați aici](#top).
+
+
+**Răspuns:**  
+Faptul că indexul apare cu valoarea 0 este normal. În JSON-ul oferit de iHidro, nu există date asociate cu indexul curent decât atunci când perioada de transmitere este activă. Totuși, implementarea unei funcționalități care să afișeze indexul curent doar în cele 4 zile în care perioada de transmitere este activă nu ar avea sens. Din acest motiv, am decis să las indexul la valoarea 0 și, în schimb, să ofer alte informații relevante despre contor, precum:
+
+- Numărul dispozitivului,
+- Tipul contorului,
+- Data de început a următoarei perioade de citire,
+- Data de sfârșit a perioadei de citire.
+
+În cazul celor de la E.ON, indexul curent este mereu prezent, însă acest comportament nu reprezintă o problemă a integrării. Diferența constă în modul în care Hidroelectrica furnizează informațiile în API-ul lor, acesta fiind comportamentul standard.
+
+#### Exemple de răspunsuri API:
+
+##### Hidroelectrica:
+```json
+{
+    "version": "7.5.2",
+    "status_code": 200,
+    "responsestatus": 1,
+    "request_time": "2025-01-27 08:58:43 PM",
+    "response_time": "2025-01-27 08:58:43 PM",
+    "result": {
+        "MeterDetails": [
+            {
+                "MeterType": "E",
+                "MeterNumber": "30000000",
+                "IsAMI": false,
+                "Status": 1,
+                "Address": null
+            }
+        ]
+    }
+}
+```
+
+##### E.ON:
+```json
+{
+    "year": 2025,
+    "meters": [
+        {
+            "meterSeries": "00222225XXXXXXXXXX",
+            "indexes": [
+                {
+                    "indexType": "ME",
+                    "readings": [
+                        {
+                            "month": 1,
+                            "value": 952,
+                            "readingType": "01",
+                            "decimals": 0
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+```
