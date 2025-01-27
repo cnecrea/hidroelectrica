@@ -156,3 +156,6 @@ Faptul că indexul apare cu valoarea 0 este normal. În JSON-ul oferit de iHidro
     ]
 }
 ```
+**Concluzie:**
+
+Comportamentul în care indexul apare cu valoarea 0 este cauzat de modul în care Hidroelectrica furnizează informațiile în API-ul lor. Acesta nu este un defect al integrării, ci reflectă limitările datelor oferite. În schimb, sunt disponibile alte informații utile despre contor.
