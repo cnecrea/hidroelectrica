@@ -282,8 +282,15 @@ class IndexCurentSensor(HidroelectricaBaseSensor):
         #_LOGGER.debug("window_data: %s", window_data)
         #_LOGGER.debug("usage_gen: %s", usage_gen)
 
+        meter_number = (
+            multi_data.get("result", {}).get("MeterDetails", [{}])[1].get("MeterNumber", "N/A")
+            if len(multi_data.get("result", {}).get("MeterDetails", [])) > 1
+            else multi_data.get("result", {}).get("MeterDetails", [{}])[0].get("MeterNumber", "N/A")
+        )
+
+
         return {
-            "Numărul dispozitivului": multi_data.get("result", {}).get("MeterDetails", [{}])[0].get("MeterNumber", "N/A"),
+            "Numărul dispozitivului": meter_number,
             "Tip de contor": multi_data.get("result", {}).get("MeterDetails", [{}])[0].get("MeterType", "N/A"),
             "Data de începere a următoarei citiri": window_data.get("result", {}).get("Data", {}).get("NextMonthOpeningDate", "N/A"),
             "Data de final a citirii": window_data.get("result", {}).get("Data", {}).get("NextMonthClosingDate", "N/A"),
