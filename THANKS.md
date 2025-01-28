@@ -6,6 +6,7 @@ Vreau să le mulțumesc din suflet tuturor celor care m-au susținut și au cont
 
 Le sunt recunoscător următorilor susținători pentru generozitatea lor:
 
+- **Robert Olteanu** 
 - **Tudor H (HaT)**
 - **Andrei Ion**
 - **Gabi Dragoi**
@@ -18,7 +19,6 @@ Le sunt recunoscător următorilor susținători pentru generozitatea lor:
 - **Rusu Radu**
 - **Șerbănescu Bogdan**
 - **Gabriel Sfâca**
-- **Robert Olteanu** 
 - **ovydyu1985** 
 - **Dorin** 
 - **Abulafiab - Bogdan**
