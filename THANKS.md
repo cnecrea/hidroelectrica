@@ -6,6 +6,7 @@ Vreau să le mulțumesc din suflet tuturor celor care m-au susținut și au cont
 
 Le sunt recunoscător următorilor susținători pentru generozitatea lor:
 
+- **Șerban B** 
 - **Robert Olteanu** 
 - **Tudor H (HaT)**
 - **Andrei Ion**
