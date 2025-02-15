@@ -349,9 +349,9 @@ class FacturaRestantaSensor(HidroelectricaBaseSensor):
         bill_data = self._get_bill_data()
         _LOGGER.debug(f"Bill data in native_value: {bill_data}")
 
-        if not bill_data:
-            _LOGGER.debug("Bill data is None or empty.")
-            return None
+    if not bill_data:
+        _LOGGER.debug("Bill data is None or empty, returning 'Nu'.")
+        return "Nu"
 
         result_block = bill_data.get("result", {})
         rembalance = result_block.get("rembalance", "N/A")
