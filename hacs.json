@@ -1,4 +1,5 @@
 {
-    "name": "Hidroelectrica România",
-    "render_readme": true
+  "name": "Hidroelectrica România",
+  "render_readme": true,
+  "country": ["RO"]
 }
