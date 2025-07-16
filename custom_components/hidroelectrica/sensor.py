@@ -52,6 +52,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
         # Noi: senzori Data început / Data final perioadă citire
         entities.append(DataInceputCitireSensor(coordinator, entry, uan, acc_no))
         entities.append(DataFinalCitireSensor(coordinator, entry, uan, acc_no))
+        entities.append(PlataRestantaSensor(coordinator, entry, uan, acc_no))
+        entities.append(TotalNeachitatSensor(coordinator, entry, uan, acc_no))
+        entities.append(DataScadentaSensor(coordinator, entry, uan, acc_no))
 
         # Istoric facturi (unchanged)...
         facturi_data = coordinator.data["accounts_data"][uan].get("get_billing_history_list", {})
@@ -276,6 +279,78 @@ class FacturaRestantaSensor(HidroelectricaBaseSensor):
             attrs["Detalii"] = "Nu există facturi restante"
 
         return attrs
+class PlataRestantaSensor(HidroelectricaBaseSensor):
+    """Afișează suma rămasă de plată pentru factura curentă."""
+    def __init__(self, coordinator, config_entry, uan, acc_no):
+        super().__init__(coordinator, config_entry, uan, acc_no)
+        self._attr_name = "Plată restantă"
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{uan}_plata_restanta"
+        )
+        self._attr_entity_id = (
+            f"sensor.{DOMAIN}_plata_restanta_{uan}"
+        )
+        self._attr_icon = "mdi:cash-multiple"
+        self._attr_unit_of_measurement = "lei"
+
+    @property
+    def native_value(self):
+        bill = self._acc_data().get("get_bill", {}).get("result", {})
+        rem = bill.get("rembalance", "0").replace(",", ".")
+        try:
+            return float(rem)
+        except (ValueError, TypeError):
+            return None
+
+
+class TotalNeachitatSensor(HidroelectricaBaseSensor):
+    """Afișează totalul neachitat (identic cu Plata restantă)."""
+    def __init__(self, coordinator, config_entry, uan, acc_no):
+        super().__init__(coordinator, config_entry, uan, acc_no)
+        self._attr_name = "Total neachitat"
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{uan}_total_neachitat"
+        )
+        self._attr_entity_id = (
+            f"sensor.{DOMAIN}_total_neachitat_{uan}"
+        )
+        self._attr_icon = "mdi:currency-ron"
+        self._attr_unit_of_measurement = "lei"
+
+    @property
+    def native_value(self):
+        bill = self._acc_data().get("get_bill", {}).get("result", {})
+        rem = bill.get("rembalance", "0").replace(",", ".")
+        try:
+            return float(rem)
+        except (ValueError, TypeError):
+            return None
+
+
+class DataScadentaSensor(HidroelectricaBaseSensor):
+    """Afișează data scadenței facturii restante."""
+    def __init__(self, coordinator, config_entry, uan, acc_no):
+        super().__init__(coordinator, config_entry, uan, acc_no)
+        self._attr_name = "Data scadenței"
+        self._attr_unique_id = (
+            f"{config_entry.entry_id}_{uan}_data_scadenta"
+        )
+        self._attr_entity_id = (
+            f"sensor.{DOMAIN}_data_scadenta_{uan}"
+        )
+        self._attr_icon = "mdi:calendar-alert"
+
+    @property
+    def native_value(self):
+        bill = self._acc_data().get("get_bill", {}).get("result", {})
+        dued = bill.get("duedate")
+        if not dued:
+            return None
+        try:
+            # API returns "DD/MM/YYYY"
+            return datetime.datetime.strptime(dued, "%d/%m/%Y").date()
+        except ValueError:
+            return dued  # fallback to raw string if parse fails
 
 
 # ------------------------------------------------------------------------
