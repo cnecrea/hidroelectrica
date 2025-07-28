@@ -1,5 +1,6 @@
 name: Creează lansare de tip draft
 
+
 on:
   workflow_dispatch:  # Permite rularea manuală a workflow-ului cu parametri
     inputs:
