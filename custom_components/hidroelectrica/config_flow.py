@@ -115,7 +115,7 @@ class HidroelectricaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         Metodă statică ce leagă acest config flow de un flux de opțiuni 
         (pentru a modifica setările ulterior).
         """
-        return HidroelectricaOptionsFlow(config_entry)
+        return HidroelectricaOptionsFlow()
 
 
 class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
@@ -124,11 +124,10 @@ class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
     Aici, utilizatorul poate schimba update_interval după prima configurare.
     """
 
-    def __init__(self, config_entry):
+    def __init__(self):
         """
         Constructor ce primește config_entry, pentru a ști ce date avem deja.
         """
-        self.config_entry = config_entry
         self._errors = {}
 
     async def async_step_init(self, user_input=None):
@@ -147,7 +146,10 @@ class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=user_input)
 
         # Preluăm datele curente din config_entry, dacă există
-        current_interval = self.config_entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        current_interval = self.config_entry.options.get(
+            CONF_UPDATE_INTERVAL,
+            self.config_entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        )
         
         # Construim schema
         # Folosim "selector" pentru a oferi o experiență mai modernă de selectare a intervalului
