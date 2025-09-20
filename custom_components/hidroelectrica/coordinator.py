@@ -104,10 +104,6 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
                     self.api.get_multi_meter_details, uan, acc_no
                 ) or {}
 
-                resp_meter_value = await self.hass.async_add_executor_job(
-                    self.api.get_current_meter_value, uan, acc_no
-                ) or {}
-
                 resp_window_dates = await self.hass.async_add_executor_job(
                     self.api.get_window_dates_enc, uan, acc_no
                 ) or {}
@@ -155,7 +151,6 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
                     "validate_user_login": resp_validate_login,
                     "get_user_setting": resp_user_setting,
                     "get_multi_meter": resp_multi_meter,
-                    "get_meter_value": resp_meter_value,
                     "get_window_dates_enc": resp_window_dates,
                     "get_bill": resp_bill,
                     "get_billing_history_list": resp_billing_history,
