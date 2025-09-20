@@ -20,7 +20,6 @@ from .const import (
     API_URL_VALIDATE_LOGIN,
     API_URL_GET_USER_SETTING,
     API_GET_MULTI_METER,
-    API_GET_MULTI_METER_CURRENT,
     API_GET_MULTI_METER_READ_DATE,
     API_URL_GET_BILL,
     API_URL_GET_BILL_HISTORY,
@@ -244,19 +243,6 @@ class HidroelectricaAPI:
             descriere="GetMultiMeter (Detalii contor)"
         )
 
-    def get_current_meter_value(self, utility_account_number, account_number):
-        payload = {
-            "MeterType": "E",
-            "UserID": self._user_id,
-            "UtilityAccountNumber": utility_account_number,
-            "AccountNumber": account_number
-        }
-        return self._post_request(
-            API_GET_MULTI_METER_CURRENT,
-            payload=payload,
-            headers=self._auth_header,
-            descriere="GetMeterValue (Index contor)"
-        )
 
     def get_window_dates_enc(self, utility_account_number, account_number):
         payload = {
