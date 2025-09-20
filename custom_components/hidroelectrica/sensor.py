@@ -48,7 +48,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
         # Senzorii de bază (exemplu, dacă ai deja aceste clase definite)
         entities.append(DateContractSensor(coordinator, entry, uan, acc_no))
-        entities.append(IndexCurentSensor(coordinator, entry, uan, acc_no))
         entities.append(FacturaRestantaSensor(coordinator, entry, uan, acc_no))
 
         # -------------------------------------------------
@@ -221,97 +220,6 @@ class DateContractSensor(HidroelectricaBaseSensor):
     def _get_user_setting_data(self):
         """Returnează sub-dicționarul get_user_setting (API_URL_GET_USER_SETTING)."""
         return self._acc_data().get("get_user_setting", {})
-
-
-# ------------------------------------------------------------------------
-# IndexCurentSensor
-# ------------------------------------------------------------------------
-class IndexCurentSensor(HidroelectricaBaseSensor):
-    """
-    Senzor care afișează indexul curent.
-    - Folosește: get_multi_meter (API_GET_MULTI_METER), get_meter_value (API_GET_MULTI_METER_CURRENT),
-                get_window_dates_enc (API_GET_MULTI_METER_READ_DATE)
-    """
-
-    def __init__(self, coordinator, config_entry, utility_account_number, account_number):
-        super().__init__(coordinator, config_entry, utility_account_number, account_number)
-        self._attr_name = "Index curent"
-        self._attr_unique_id = f"{config_entry.entry_id}_{utility_account_number}_index_curent"
-        self._attr_entity_id = f"sensor.{DOMAIN}_index_curent_{utility_account_number}"
-        self._attr_icon = "mdi:gauge"
-
-    @property
-    def entity_id(self):
-        """Returnează identificatorul explicit al entității."""
-        return self._attr_entity_id
-
-    @entity_id.setter
-    def entity_id(self, value):
-        """Setează identificatorul explicit al entității."""
-        self._attr_entity_id = value
-
-    @property
-    def native_value(self):
-        """
-        Exemplu: afișăm 'IndexValue' din get_meter_value.
-        """
-        meter_data = self._get_meter_value_data()
-        if not meter_data:
-            return None
-
-        # Dacă result.responsestatus=0 => "No Record Found" => return 0
-        if meter_data.get("result", {}).get("responsestatus") == 0:
-            return 0
-
-        return meter_data.get("IndexValue", 0)
-
-    @property
-    def extra_state_attributes(self):
-        """
-        Ca atribute, aducem date din:
-        - get_multi_meter (ex. "MeterNumber")
-        - get_window_dates_enc (ex. "Is_Window_Open")
-        """
-        multi_data = self._get_multi_meter_data()
-        meter_curent = self._get_meter_value_data() # nu sunt date
-        window_data = self._get_window_dates_data()
-        usage_gen = self._get_usage_generation()
-            
-        #_LOGGER.debug("multi_data: %s", multi_data)
-        #_LOGGER.debug("meter_curent: %s", meter_curent)
-        #_LOGGER.debug("window_data: %s", window_data)
-        #_LOGGER.debug("usage_gen: %s", usage_gen)
-
-        meter_number = (
-            multi_data.get("result", {}).get("MeterDetails", [{}])[1].get("MeterNumber", "N/A")
-            if len(multi_data.get("result", {}).get("MeterDetails", [])) > 1
-            else multi_data.get("result", {}).get("MeterDetails", [{}])[0].get("MeterNumber", "N/A")
-        )
-
-
-        return {
-            "Numărul dispozitivului": meter_number,
-            "Tip de contor": multi_data.get("result", {}).get("MeterDetails", [{}])[0].get("MeterType", "N/A"),
-            "Data de începere a următoarei citiri": window_data.get("result", {}).get("Data", {}).get("NextMonthOpeningDate", "N/A"),
-            "Data de final a citirii": window_data.get("result", {}).get("Data", {}).get("NextMonthClosingDate", "N/A"),
-            "attribution": ATTRIBUTION,
-        }
-
-    def _get_multi_meter_data(self):
-        """Returnează sub-dicționarul get_multi_meter (API_GET_MULTI_METER)."""
-        return self._acc_data().get("get_multi_meter", {})
-
-    def _get_meter_value_data(self): # nu sunt date
-        """Returnează sub-dicționarul get_meter_value (API_GET_MULTI_METER_CURRENT)."""
-        return self._acc_data().get("get_meter_value", {})
-
-    def _get_window_dates_data(self):
-        """Returnează sub-dicționarul get_window_dates_enc (API_GET_MULTI_METER_READ_DATE)."""
-        return self._acc_data().get("get_window_dates_enc", {})
-
-    def _get_usage_generation(self):
-        """Returnează sub-dicționarul get_window_dates_enc (API_GET_MULTI_METER_READ_DATE)."""
-        return self._acc_data().get("get_usage_generation", {})
 
 
 # ------------------------------------------------------------------------
