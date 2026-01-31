@@ -37,6 +37,7 @@ Această integrare pentru Home Assistant oferă **monitorizare completă** a dat
   - **📊 Atribute disponibile**:
       - Plată restantă (ex. "259.12 lei, depășită cu 1 zi")
       - Total neachitat
+      - Adresa de consum
 
 ### Senzor `Arhivă`:
   - **📚 Date istorice**:

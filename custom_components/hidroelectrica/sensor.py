@@ -359,6 +359,19 @@ class FacturaRestantaSensor(HidroelectricaBaseSensor):
             "attribution": ATTRIBUTION,
         }
 
+        # Adăugăm adresa de consum preluată din validate_user_login (la fel ca în DateContractSensor)
+        try:
+            val_data = self._validate_login_data()
+            address_raw = val_data.get('Address', 'N/A') if val_data else 'N/A'
+            parts = address_raw.split(', ')
+            if len(parts) >= 2:
+                address_formatted = f"Strada {parts[1].capitalize()}, {parts[0]}"
+            else:
+                address_formatted = address_raw
+            attributes["Adresa de consum"] = address_formatted
+        except Exception:
+            attributes["Adresa de consum"] = "N/A"
+
         if total_neachitat > 0:
             attributes["Total neachitat"] = f"{total_neachitat_formatted} lei"
             #attributes["duedate"] = result_block.get("duedate", "N/A")  # Poți ajusta să ia prima factură restantă
