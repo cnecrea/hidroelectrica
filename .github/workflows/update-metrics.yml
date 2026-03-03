@@ -1,0 +1,170 @@
+name: Actualizare statistici descărcări
+
+on:
+  # Rulează automat după ce se finalizează workflow-ul de build/upload ZIP
+  workflow_run:
+    workflows: ["Build & Upload HACS ZIP"]
+    types: [completed]
+
+  # Fallback: rulează și la publicarea unui release
+  release:
+    types: [published]
+
+  # Rulează zilnic pentru a prinde descărcări noi
+  schedule:
+    - cron: "20 0 * * *"
+
+  # Rulează manual din tabul Actions
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: statistici
+  cancel-in-progress: false
+
+jobs:
+  statistici:
+    # Dacă a pornit din workflow_run, rulează doar dacă build-ul a reușit
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: true
+
+      - name: Generează statistici descărcări (totaluri, ultima versiune, top5)
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const repo = context.repo;
+
+            // 1) Preia toate release-urile (paginat)
+            let releases = await github.paginate(
+              github.rest.repos.listReleases,
+              { owner: repo.owner, repo: repo.repo, per_page: 100 }
+            );
+
+            // Ignoră draft-urile; păstrează prerelease-urile
+            releases = releases.filter(r => !r.draft);
+
+            // 2) Calculează totaluri & structuri
+            let totalGeneral = 0;
+            const peRelease = [];
+            const peAsset = [];
+
+            for (const r of releases) {
+              const assets = r.assets || [];
+              const totalRelease = assets.reduce((acc, a) => acc + (a.download_count || 0), 0);
+              totalGeneral += totalRelease;
+
+              peRelease.push({
+                tag: r.tag_name,
+                nume: r.name,
+                prerelease: r.prerelease,
+                publicat_la: r.published_at,
+                descarcari: totalRelease,
+                assets: assets.map(a => ({
+                  nume: a.name,
+                  descarcari: a.download_count || 0,
+                  url: a.browser_download_url
+                }))
+              });
+
+              for (const a of assets) {
+                peAsset.push({
+                  tag: r.tag_name,
+                  nume: a.name,
+                  descarcari: a.download_count || 0,
+                  url: a.browser_download_url
+                });
+              }
+            }
+
+            // Top 5 versiuni după numărul de descărcări & ultima versiune după data publicării
+            const top5 = [...peRelease].sort((a,b) => b.descarcari - a.descarcari).slice(0,5);
+            const ultima = [...peRelease].sort(
+              (a,b) => new Date(b.publicat_la) - new Date(a.publicat_la)
+            )[0] || null;
+
+            // 3) Scrie fișierele în /statistici
+            const acum = new Date().toISOString();
+            const dirStatistici = path.join(process.cwd(), 'statistici');
+            const dirShields = path.join(dirStatistici, 'shields');
+            if (!fs.existsSync(dirStatistici)) fs.mkdirSync(dirStatistici, { recursive: true });
+            if (!fs.existsSync(dirShields)) fs.mkdirSync(dirShields, { recursive: true });
+
+            // 3a) Snapshot detaliat curent
+            fs.writeFileSync(
+              path.join(dirStatistici, 'descarcari.json'),
+              JSON.stringify({
+                generat_la: acum,
+                repository: `${repo.owner}/${repo.repo}`,
+                total_descarcari: totalGeneral,
+                pe_release: peRelease,
+                pe_asset: peAsset
+              }, null, 2)
+            );
+
+            // 3b) Istoric (JSONL)
+            fs.appendFileSync(
+              path.join(dirStatistici, 'istoric_descarcari.json'),
+              JSON.stringify({ timestamp: acum, total_descarcari: totalGeneral, pe_release: peRelease }) + '\n'
+            );
+
+            // 3c) Top 5 (JSON + Markdown)
+            fs.writeFileSync(
+              path.join(dirStatistici, 'top5.json'),
+              JSON.stringify({ generat_la: acum, top: top5 }, null, 2)
+            );
+
+            const rows = top5.map((r, i) =>
+              `| ${i+1} | ${r.tag} | ${r.descarcari} | ${r.publicat_la ? r.publicat_la.split('T')[0] : ''} |`
+            ).join('\n');
+
+            fs.writeFileSync(
+              path.join(dirStatistici, 'TOP.md'),
+              `# Top 5 Versiuni după Descărcări\n\nUltima generare: ${acum}\n\n` +
+              `| # | Versiune | Descărcări | Publicat |\n| - | - | -: | - |\n${rows}\n`
+            );
+
+            // 3d) Shields: total downloads
+            const totalPretty = new Intl.NumberFormat('en-US').format(totalGeneral);
+            fs.writeFileSync(
+              path.join(dirShields, 'descarcari.json'),
+              JSON.stringify({
+                schemaVersion: 1,
+                label: "descărcări (assets)",
+                message: totalPretty,
+                color: "blue"
+              })
+            );
+
+            // 3e) Shields: ultima versiune
+            const ultimaCount = ultima ? ultima.descarcari : 0;
+            fs.writeFileSync(
+              path.join(dirShields, 'ultima_release.json'),
+              JSON.stringify({
+                schemaVersion: 1,
+                label: "descărcări ultima versiune",
+                message: String(ultimaCount),
+                color: "informational"
+              })
+            );
+
+      - name: Commit statistici
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: "chore(statistici): actualizare totaluri, ultima versiune & top5"
+          file_pattern: statistici/**
+          add_options: -A
+          commit_user_name: github-actions
+          commit_user_email: github-actions@github.com
