@@ -1,6 +1,11 @@
 ![logo](https://github.com/user-attachments/assets/fef5f68d-5137-4fab-90c5-da8dc28abbae)
 
 # Hidroelectrica România - Integrare pentru Home Assistant 🏠🇷🇴
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/v/release/cnecrea/hidroelectrica)](https://github.com/cnecrea/hidroelectrica/releases)
+![Total descărcări pentru toate versiunile](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cnecrea/hidroelectrica/main/statistici/shields/descarcari.json)
+![Descărcări pentru ultima versiune](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cnecrea/hidroelectrica/main/statistici/shields/ultima_release.json)
+
 
 Această integrare pentru Home Assistant oferă **monitorizare completă** a datelor contractuale, facturilor curente, și istoricul plăților pentru utilizatorii Hidroelectrica România. Integrarea este configurabilă prin interfața UI și permite afișarea informațiilor utile în timp real. 🚀
 
