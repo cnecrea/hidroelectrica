@@ -163,7 +163,7 @@ jobs:
       - name: Commit statistici
         uses: stefanzweifel/git-auto-commit-action@v7
         with:
-          commit_message: "chore(statistici): actualizare totaluri, ultima versiune & top5"
+          commit_message: "actualizare statistici"
           file_pattern: statistici/**
           add_options: -A
           commit_user_name: github-actions
