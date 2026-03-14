@@ -1,9 +1,22 @@
 ![logo](https://github.com/user-attachments/assets/fef5f68d-5137-4fab-90c5-da8dc28abbae)
 
 # Hidroelectrica România - Integrare pentru Home Assistant 🏠🇷🇴
+
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/cnecrea/hidroelectrica)](https://github.com/cnecrea/hidroelectrica/releases)
-![Total descărcări pentru toate versiunile](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cnecrea/hidroelectrica/main/statistici/shields/descarcari.json)
+[![Licență](https://img.shields.io/github/license/cnecrea/hidroelectrica)](https://github.com/cnecrea/hidroelectrica/blob/main/LICENSE.md)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.11%2B-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
+[![GitHub Stars](https://img.shields.io/github/stars/cnecrea/hidroelectrica?style=flat&logo=github)](https://github.com/cnecrea/hidroelectrica/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/cnecrea/hidroelectrica?style=flat&logo=github)](https://github.com/cnecrea/hidroelectrica/network/members)
+[![GitHub Watchers](https://img.shields.io/github/watchers/cnecrea/hidroelectrica?style=flat&logo=github)](https://github.com/cnecrea/hidroelectrica/watchers)
+[![GitHub Issues](https://img.shields.io/github/issues/cnecrea/hidroelectrica)](https://github.com/cnecrea/hidroelectrica/issues)
+[![Ultimul Commit](https://img.shields.io/github/last-commit/cnecrea/hidroelectrica)](https://github.com/cnecrea/hidroelectrica/commits/main)
+[![Commit-uri/lună](https://img.shields.io/github/commit-activity/m/cnecrea/hidroelectrica)](https://github.com/cnecrea/hidroelectrica/commits/main)
+[![Dimensiune Repo](https://img.shields.io/github/repo-size/cnecrea/hidroelectrica)](https://github.com/cnecrea/hidroelectrica)
+[![Limbaj Principal](https://img.shields.io/github/languages/top/cnecrea/hidroelectrica)](https://github.com/cnecrea/hidroelectrica)
+[![Total descărcări](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cnecrea/hidroelectrica/main/statistici/shields/descarcari.json)](https://github.com/cnecrea/hidroelectrica/releases)
+[![Descărcări ultima versiune](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cnecrea/hidroelectrica/main/statistici/shields/ultima_release.json)](https://github.com/cnecrea/hidroelectrica/releases/latest)
+![Badge](https://hitscounter.dev/api/hit?url=https%3A%2F%2Fgithub.com%2Fcnecrea%2Fhidroelectrica&label=vizitatori&icon=github&color=%23198754&message=&style=flat&tz=Europe%2FBucharest)
 
 
 Această integrare pentru Home Assistant oferă **monitorizare completă** a datelor contractuale, facturilor curente, și istoricul plăților pentru utilizatorii Hidroelectrica România. Integrarea este configurabilă prin interfața UI și permite afișarea informațiilor utile în timp real. 🚀
