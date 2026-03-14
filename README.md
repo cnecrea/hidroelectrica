@@ -54,6 +54,7 @@ Această integrare pentru Home Assistant oferă **monitorizare completă** a dat
   - **📊 Atribute disponibile**:
       - Plată restantă (ex. "259.12 lei, depășită cu 1 zi")
       - Total neachitat
+      - Adresa de consum
 
 ### Senzor `Arhivă`:
   - **📚 Date istorice**:
@@ -112,7 +113,7 @@ action:
   - service: notify.mobile_app_your_phone
     data:
       title: "Factură Restantă Detectată! ⚡"
-      message: "Aveți o factură restantă în valoare de {{ states('sensor.hidroelectrica_factura_restanta_XXXXXXXX') }}."
+      message: "Aveți o factură restantă în valoare de {{ states('sensor.hidroelectrica_factura_restanta_XXXXXXXX') }} pentru locul de consum {{ state_attr('sensor.hidroelectrica_date_contract_XXXXXXXX','Adresa de consum') }}."
 mode: single
 ```
 
