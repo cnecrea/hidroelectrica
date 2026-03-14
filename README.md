@@ -6,7 +6,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/cnecrea/hidroelectrica)](https://github.com/cnecrea/hidroelectrica/releases)
 [![Licență](https://img.shields.io/github/license/cnecrea/hidroelectrica)](https://github.com/cnecrea/hidroelectrica/blob/main/LICENSE.md)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.11%2B-41BDF5?logo=homeassistant&logoColor=white)](https://www.home-assistant.io/)
-[![GitHub Stars](https://img.shields.io/github/stars/cnecrea/hidroelectrica?style=flat&logo=github)](https://github.com/cnecrea/hidroelectrica/stargazers)
+[![Stars](https://img.shields.io/github/stars/cnecrea/hidroelectrica?style=social)](https://github.com/cnecrea/hidroelectrica/stargazers)
 [![GitHub Forks](https://img.shields.io/github/forks/cnecrea/hidroelectrica?style=flat&logo=github)](https://github.com/cnecrea/hidroelectrica/network/members)
 [![GitHub Watchers](https://img.shields.io/github/watchers/cnecrea/hidroelectrica?style=flat&logo=github)](https://github.com/cnecrea/hidroelectrica/watchers)
 [![GitHub Issues](https://img.shields.io/github/issues/cnecrea/hidroelectrica)](https://github.com/cnecrea/hidroelectrica/issues)
