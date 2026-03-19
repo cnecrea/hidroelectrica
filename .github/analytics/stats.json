@@ -1,0 +1,312 @@
+{
+  "repo": "",
+  "prima_colectare": "",
+  "ultima_actualizare": "2026-03-19T06:51:58Z",
+  "zilnic": {
+    "2026-03-01": {
+      "clones_total": 2,
+      "clones_unice": 1,
+      "views_total": 11,
+      "views_unice": 4
+    },
+    "2026-03-02": {
+      "clones_total": 3,
+      "clones_unice": 2,
+      "views_total": 9,
+      "views_unice": 3
+    },
+    "2026-03-03": {
+      "clones_total": 50,
+      "clones_unice": 25,
+      "views_total": 11,
+      "views_unice": 5
+    },
+    "2026-03-04": {
+      "clones_total": 19,
+      "clones_unice": 11,
+      "views_total": 1,
+      "views_unice": 1
+    },
+    "2026-03-05": {
+      "clones_total": 24,
+      "clones_unice": 11,
+      "views_total": 2,
+      "views_unice": 2
+    },
+    "2026-03-06": {
+      "clones_total": 15,
+      "clones_unice": 9,
+      "views_total": 13,
+      "views_unice": 6
+    },
+    "2026-03-07": {
+      "clones_total": 13,
+      "clones_unice": 8,
+      "views_total": 2,
+      "views_unice": 2
+    },
+    "2026-03-08": {
+      "clones_total": 11,
+      "clones_unice": 7,
+      "views_total": 4,
+      "views_unice": 4
+    },
+    "2026-03-09": {
+      "clones_total": 36,
+      "clones_unice": 18,
+      "views_total": 3,
+      "views_unice": 2
+    },
+    "2026-03-10": {
+      "clones_total": 14,
+      "clones_unice": 8,
+      "views_total": 6,
+      "views_unice": 5
+    },
+    "2026-03-11": {
+      "clones_total": 6,
+      "clones_unice": 2,
+      "views_total": 13,
+      "views_unice": 2
+    },
+    "2026-03-12": {
+      "clones_total": 11,
+      "clones_unice": 7,
+      "views_total": 16,
+      "views_unice": 7
+    },
+    "2026-03-13": {
+      "clones_total": 27,
+      "clones_unice": 14,
+      "views_total": 15,
+      "views_unice": 3
+    },
+    "2026-03-14": {
+      "clones_total": 34,
+      "clones_unice": 14,
+      "views_total": 2,
+      "views_unice": 1
+    },
+    "2026-03-15": {
+      "stars": 77,
+      "forks": 8,
+      "watchers": 2,
+      "open_issues": 3,
+      "referrers": [
+        {
+          "sursa": "github.com",
+          "vizite": 21,
+          "vizitatori_unici": 10
+        },
+        {
+          "sursa": "Google",
+          "vizite": 18,
+          "vizitatori_unici": 8
+        },
+        {
+          "sursa": "DuckDuckGo",
+          "vizite": 8,
+          "vizitatori_unici": 2
+        },
+        {
+          "sursa": "m.facebook.com",
+          "vizite": 2,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "facebook.com",
+          "vizite": 1,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "l.facebook.com",
+          "vizite": 1,
+          "vizitatori_unici": 1
+        }
+      ],
+      "clones_total": 172,
+      "clones_unice": 71,
+      "views_total": 6,
+      "views_unice": 5
+    },
+    "2026-03-16": {
+      "stars": 79,
+      "forks": 8,
+      "watchers": 2,
+      "open_issues": 0,
+      "referrers": [
+        {
+          "sursa": "github.com",
+          "vizite": 25,
+          "vizitatori_unici": 14
+        },
+        {
+          "sursa": "Google",
+          "vizite": 15,
+          "vizitatori_unici": 7
+        },
+        {
+          "sursa": "DuckDuckGo",
+          "vizite": 8,
+          "vizitatori_unici": 2
+        },
+        {
+          "sursa": "m.facebook.com",
+          "vizite": 2,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "facebook.com",
+          "vizite": 1,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "l.facebook.com",
+          "vizite": 1,
+          "vizitatori_unici": 1
+        }
+      ],
+      "clones_total": 209,
+      "clones_unice": 85,
+      "views_total": 42,
+      "views_unice": 17
+    },
+    "2026-03-17": {
+      "stars": 80,
+      "forks": 8,
+      "watchers": 2,
+      "open_issues": 0,
+      "referrers": [
+        {
+          "sursa": "github.com",
+          "vizite": 34,
+          "vizitatori_unici": 16
+        },
+        {
+          "sursa": "Google",
+          "vizite": 13,
+          "vizitatori_unici": 7
+        },
+        {
+          "sursa": "DuckDuckGo",
+          "vizite": 8,
+          "vizitatori_unici": 2
+        },
+        {
+          "sursa": "m.facebook.com",
+          "vizite": 2,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "facebook.com",
+          "vizite": 1,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "l.facebook.com",
+          "vizite": 1,
+          "vizitatori_unici": 1
+        }
+      ],
+      "clones_total": 39,
+      "clones_unice": 18,
+      "views_total": 28,
+      "views_unice": 18
+    },
+    "2026-03-18": {
+      "stars": 80,
+      "forks": 8,
+      "watchers": 2,
+      "open_issues": 0,
+      "referrers": [
+        {
+          "sursa": "github.com",
+          "vizite": 30,
+          "vizitatori_unici": 16
+        },
+        {
+          "sursa": "Google",
+          "vizite": 19,
+          "vizitatori_unici": 12
+        },
+        {
+          "sursa": "DuckDuckGo",
+          "vizite": 8,
+          "vizitatori_unici": 2
+        },
+        {
+          "sursa": "m.facebook.com",
+          "vizite": 2,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "facebook.com",
+          "vizite": 1,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "l.facebook.com",
+          "vizite": 1,
+          "vizitatori_unici": 1
+        }
+      ],
+      "clones_total": 17,
+      "clones_unice": 8,
+      "views_total": 29,
+      "views_unice": 12
+    },
+    "2026-03-19": {
+      "stars": 80,
+      "forks": 8,
+      "watchers": 2,
+      "open_issues": 0,
+      "referrers": [
+        {
+          "sursa": "github.com",
+          "vizite": 38,
+          "vizitatori_unici": 22
+        },
+        {
+          "sursa": "Google",
+          "vizite": 35,
+          "vizitatori_unici": 14
+        },
+        {
+          "sursa": "DuckDuckGo",
+          "vizite": 8,
+          "vizitatori_unici": 2
+        },
+        {
+          "sursa": "m.facebook.com",
+          "vizite": 2,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "facebook.com",
+          "vizite": 1,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "l.facebook.com",
+          "vizite": 1,
+          "vizitatori_unici": 1
+        }
+      ]
+    }
+  },
+  "releases": {
+    "3.0.0": 0,
+    "2.5.5": 9,
+    "2.5.4": 7,
+    "2.5.3": 4,
+    "2.5.2": 7,
+    "2.5.1": 5,
+    "2.5.0": 6,
+    "2.4.0": 13,
+    "2.3.0": 189,
+    "2.2.0": 21,
+    "2.1.0": 70,
+    "2.0.0": 86,
+    "1.0.0": 151
+  }
+}

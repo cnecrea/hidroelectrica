@@ -1,0 +1,48 @@
+name: Feedback
+description: Oferiți feedback despre integrarea Hidroelectrica România sau sugerați îmbunătățiri.
+title: "Titlul propunerii sau al observației dvs."
+labels:
+  - îmbunătățire
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Mulțumim că v-ați luat timp să ne oferiți feedback! 🙌  
+        Completați informațiile de mai jos pentru a ne ajuta să înțelegem mai bine sugestiile sau observațiile dvs.
+
+  - type: textarea
+    id: descriere
+    attributes:
+      label: Descrieți feedback-ul sau sugestia
+      description: Furnizați detalii clare despre observațiile sau îmbunătățirile pe care le sugerați.
+      placeholder: "Scrieți aici sugestia sau observația dvs..."
+    validations:
+      required: true
+
+  - type: input
+    id: beneficiu
+    attributes:
+      label: Care este beneficiul acestei îmbunătățiri?
+      description: Cum credeți că această schimbare ar putea ajuta utilizatorii?
+      placeholder: "Descrieți impactul pozitiv..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: prioritate
+    attributes:
+      label: Ce nivel de prioritate considerați că are această sugestie?
+      description: Selectați nivelul de importanță.
+      options:
+        - Scăzut
+        - Mediu
+        - Ridicat
+    validations:
+      required: true
+
+  - type: textarea
+    id: informatii_suplimentare
+    attributes:
+      label: Alte informații relevante
+      description: Adăugați orice alte detalii pe care le considerați utile.
+      placeholder: "Exemple, contexte sau alte detalii..."

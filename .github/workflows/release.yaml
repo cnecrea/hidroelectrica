@@ -1,0 +1,192 @@
+name: Creează lansare de tip draft
+
+on:
+  workflow_dispatch:
+    inputs:
+      increment_type:
+        description: "Tipul de incrementare al versiunii (major/minor/patch)"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+jobs:
+  release:
+    name: Creează lansare de tip draft
+    runs-on: ubuntu-22.04
+
+    steps:
+      # 1. Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 2. Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # 3. Update manifest.json version
+      - name: Update manifest.json version
+        id: update_manifest
+        run: |
+          if ! command -v jq &> /dev/null; then
+            echo "Installing jq..."
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+          MANIFEST_PATH="custom_components/hidroelectrica/manifest.json"
+
+          if [ ! -f "$MANIFEST_PATH" ]; then
+            echo "Error: manifest.json not found at $MANIFEST_PATH"
+            exit 1
+          fi
+
+          VERSION=$(jq -r '.version' "$MANIFEST_PATH")
+          echo "Current version: $VERSION"
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          INCREMENT_TYPE="${{ github.event.inputs.increment_type }}"
+          echo "Increment type: $INCREMENT_TYPE"
+
+          if [ "$INCREMENT_TYPE" = "major" ]; then
+            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
+          elif [ "$INCREMENT_TYPE" = "minor" ]; then
+            MINOR=$((MINOR + 1)); PATCH=0
+          elif [ "$INCREMENT_TYPE" = "patch" ]; then
+            PATCH=$((PATCH + 1))
+          else
+            echo "Invalid increment type: $INCREMENT_TYPE"
+            exit 1
+          fi
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: $NEW_VERSION"
+          echo "OLD_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
+
+          jq --arg version "$NEW_VERSION" '.version = $version' "$MANIFEST_PATH" > manifest.tmp && mv manifest.tmp "$MANIFEST_PATH"
+
+      # 4. Generează body-ul release-ului cu statistici
+      - name: Generează release body
+        run: |
+          python3 << 'PYSCRIPT'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          new_version = "${{ env.new_version }}"
+          old_version = "${{ env.OLD_VERSION }}"
+
+          # ── Statistici din stats.json ──
+          stats_file = Path(".github/analytics/stats.json")
+          stars, instalari, clone_14z = "—", "—", "—"
+
+          if stats_file.exists():
+              stats = json.loads(stats_file.read_text())
+              zilnic = stats.get("zilnic", {})
+
+              def fmt(n):
+                  if n >= 1_000_000: return f"{n/1_000_000:.1f}M"
+                  if n >= 1_000: return f"{n/1_000:.1f}k"
+                  return str(n)
+
+              zile = sorted(zilnic.keys(), reverse=True)
+              if zile:
+                  stars = zilnic[zile[0]].get("stars", 0)
+
+              total_clone = sum(zi.get("clones_total", 0) for zi in zilnic.values())
+              total_clone_14z = sum(zi.get("clones_unice", 0) for zi in zilnic.values())
+
+              instalari = fmt(total_clone)
+              clone_14z = fmt(total_clone_14z)
+
+          # ── Commit-uri de la ultima versiune ──
+          try:
+              result = subprocess.run(
+                  ["git", "tag", "-l", old_version],
+                  capture_output=True, text=True
+              )
+              if result.stdout.strip():
+                  result = subprocess.run(
+                      ["git", "log", f"{old_version}..HEAD", "--oneline",
+                       "--no-merges", "--pretty=format:- %s"],
+                      capture_output=True, text=True
+                  )
+                  commits = result.stdout.strip()
+                  # Limităm la 20 linii
+                  lines = commits.split("\n")[:20]
+                  commits = "\n".join(lines)
+              else:
+                  commits = "- Prima lansare sau tag-ul anterior nu a fost găsit"
+          except Exception:
+              commits = "- Nu s-au putut extrage commit-urile"
+
+          # ── Generează fișierul markdown ──
+          body = f"""## Hidroelectrica România v{new_version}
+
+          ### 📋 Modificări
+
+          [aici vine textul tău]
+
+          ---
+
+          ### 📈 Integrarea în cifre
+
+          | ⭐ Stars | 📥 Instalări | 🔄 Clone (14z) |
+          |:--------:|:------------:|:--------------:|
+          | {stars} | {instalari} | {clone_14z} |
+
+          Dacă integrarea **Hidroelectrica România** îți este utilă, lasă un ⭐ pe repository — îi ajută și pe alți utilizatori să o descopere.
+
+          ---
+
+          💛 Dezvoltarea consumă timp și resurse. Dacă vrei să susții proiectul:
+          ☕ [Buy Me a Coffee](https://www.buymeacoffee.com/cnecrea) · 💰 [GitHub Sponsors](https://github.com/sponsors/cnecrea)
+          """
+
+          # Curăță indentarea din triple-quote
+          lines = body.split("\n")
+          cleaned = "\n".join(line.lstrip() for line in lines)
+
+          Path("/tmp/release_body.md").write_text(cleaned)
+          print(cleaned)
+          PYSCRIPT
+
+      # 5. Commit și push modificările
+      - name: Commit changes and push
+        env:
+          PAT: ${{ secrets.PAT_TOKEN }}
+        run: |
+          git config user.name "hidroelectrica-release-bot"
+          git config user.email "hidroelectrica-bot@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${PAT}@github.com/cnecrea/hidroelectrica.git
+
+          git add custom_components/hidroelectrica/manifest.json
+          git commit -m "Update version to ${{ env.new_version }}"
+          git push origin HEAD
+
+      # 6. Creează arhiva ZIP
+      - name: Create ZIP Archive
+        run: |
+          mkdir -p dist
+          cd custom_components/hidroelectrica
+          zip -r ../../dist/hidroelectrica.zip ./*
+
+      # 7. Creează release-ul draft cu body generat
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "${{ env.new_version }}"
+          name: "${{ env.new_version }}"
+          body_path: /tmp/release_body.md
+          files: dist/hidroelectrica.zip
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

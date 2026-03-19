@@ -1,0 +1,81 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Configurare Hidroelectrica",
+                "description": "Introduceți datele de autentificare pentru contul Hidroelectrica.",
+                "data": {
+                    "username": "Nume utilizator (email)",
+                    "password": "Parolă",
+                    "update_interval": "Interval actualizare (secunde)"
+                }
+            },
+            "select_accounts": {
+                "title": "Selectare conturi",
+                "description": "Selectați conturile pe care doriți să le monitorizați.",
+                "data": {
+                    "select_all": "Selectează toate conturile",
+                    "selected_accounts": "Conturi"
+                }
+            }
+        },
+        "error": {
+            "auth_failed": "Autentificare eșuată. Verificați numele de utilizator și parola.",
+            "no_data": "Nu s-au găsit conturi după autentificare.",
+            "no_account_selected": "Selectați cel puțin un cont.",
+            "unknown": "A apărut o eroare neașteptată."
+        },
+        "abort": {
+            "already_configured": "Acest cont este deja configurat."
+        }
+    },
+    "options": {
+        "error": {
+            "auth_failed": "Autentificare eșuată. Verificați numele de utilizator și parola.",
+            "no_data": "Nu s-au găsit conturi după autentificare.",
+            "no_account_selected": "Selectați cel puțin un cont.",
+            "unknown": "A apărut o eroare neașteptată.",
+            "license_key_empty": "Introduceți o cheie de licență.",
+            "license_key_invalid": "Cheie de licență invalidă. Verificați formatul și încercați din nou.",
+            "license_already_used": "Această cheie de licență a fost deja folosită pe altă instalare.",
+            "license_key_expired": "Această cheie de licență a expirat.",
+            "license_fingerprint_mismatch": "Această cheie de licență este legată de altă instalare.",
+            "license_network_error": "Nu se poate conecta la serverul de licențe. Verificați conexiunea la internet.",
+            "license_server_error": "Eroare server de licențe. Încercați din nou mai târziu."
+        },
+        "step": {
+            "init": {
+                "title": "Setări Hidroelectrica",
+                "description": "Selectați categoria de gestionat",
+                "menu_options": {
+                    "setari": "Setări cont",
+                    "licenta": "Licență"
+                }
+            },
+            "setari": {
+                "title": "Setări cont",
+                "description": "Actualizați credențialele și setările.",
+                "data": {
+                    "username": "Nume utilizator (email)",
+                    "password": "Parolă",
+                    "update_interval": "Interval actualizare (secunde)"
+                }
+            },
+            "select_accounts": {
+                "title": "Selectare conturi",
+                "description": "Actualizați conturile pe care doriți să le monitorizați.",
+                "data": {
+                    "select_all": "Selectează toate conturile",
+                    "selected_accounts": "Conturi"
+                }
+            },
+            "licenta": {
+                "title": "Licență Hidroelectrica",
+                "description": "{license_status}\n\nIntroduceți cheia de licență pentru a activa sau reînnoi integrarea.",
+                "data": {
+                    "license_key": "Cheie de licență"
+                }
+            }
+        }
+    }
+}

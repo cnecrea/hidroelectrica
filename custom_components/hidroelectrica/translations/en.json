@@ -1,0 +1,59 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Hidroelectrica Configuration",
+                "description": "Enter your credentials for the Hidroelectrica account.",
+                "data": {
+                    "username": "Username (email)",
+                    "password": "Password",
+                    "update_interval": "Update interval (seconds)"
+                }
+            },
+            "select_accounts": {
+                "title": "Select Accounts",
+                "description": "Select the utility accounts you want to monitor.",
+                "data": {
+                    "select_all": "Select all accounts",
+                    "selected_accounts": "Accounts"
+                }
+            }
+        },
+        "error": {
+            "auth_failed": "Authentication failed. Check your username and password.",
+            "no_data": "No accounts found after login.",
+            "no_account_selected": "Please select at least one account.",
+            "unknown": "An unexpected error occurred."
+        },
+        "abort": {
+            "already_configured": "This account is already configured."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Hidroelectrica Settings",
+                "description": "Update your credentials and settings.",
+                "data": {
+                    "username": "Username (email)",
+                    "password": "Password",
+                    "update_interval": "Update interval (seconds)"
+                }
+            },
+            "select_accounts": {
+                "title": "Select Accounts",
+                "description": "Update the utility accounts you want to monitor.",
+                "data": {
+                    "select_all": "Select all accounts",
+                    "selected_accounts": "Accounts"
+                }
+            }
+        },
+        "error": {
+            "auth_failed": "Authentication failed. Check your username and password.",
+            "no_data": "No accounts found after login.",
+            "no_account_selected": "Please select at least one account.",
+            "unknown": "An unexpected error occurred."
+        }
+    }
+}

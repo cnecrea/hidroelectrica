@@ -1,0 +1,66 @@
+name: Închidere automată a issue-urilor incomplete
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Motivul pentru care se închid issue-urile (ex. incomplete)"
+        required: true
+        default: "incomplete"
+        type: string
+
+  issues:
+    types:
+      - opened
+
+permissions:
+  issues: write
+
+jobs:
+  inchidere_si_blocare_issue:
+    name: Închidere automată și blocare
+    runs-on: ubuntu-22.04
+
+    steps:
+      # 1. Verifică corpul issue-ului pentru câmpuri incomplete
+      - name: Verifică corpul issue-ului
+        id: verifica
+        run: |
+          issue_body=$(echo "${{ github.event.issue.body }}" | sed 's/[^a-zA-Z0-9 .,!?()-]//g')
+
+          if echo "$issue_body" | grep -qE "(None|Nu, nu am citit secțiunea FAQ.md|No response)"; then
+            echo "close=true" >> $GITHUB_ENV
+          else
+            echo "close=false" >> $GITHUB_ENV
+          fi
+
+      # 2. Închide issue-ul dacă este incomplet
+      - name: Închide issue-ul
+        if: env.close == 'true'
+        run: |
+          curl -X PATCH \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/cnecrea/hidroelectrica/issues/${{ github.event.issue.number }} \
+            -d '{"state": "closed"}'
+
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/cnecrea/hidroelectrica/issues/${{ github.event.issue.number }}/comments \
+            -d '{"body": "Acest issue a fost închis automat deoarece nu au fost completate toate câmpurile obligatorii.\nTe rog să completezi informațiile necesare, inclusiv versiunea integrării, și să confirmi că ai citit [FAQ.md](https://github.com/cnecrea/hidroelectrica/blob/main/FAQ.md).\nDacă problema persistă, te rugăm să creezi un nou issue."}'
+
+      # 3. Blochează issue-ul pentru a preveni comentarii suplimentare
+      - name: Blochează issue-ul
+        if: env.close == 'true'
+        run: |
+          curl -X PUT \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/cnecrea/hidroelectrica/issues/${{ github.event.issue.number }}/lock \
+            -d '{"lock_reason": "resolved"}'
+
+      # 4. Mesaj în log
+      - name: Log notificare
+        if: env.close == 'true'
+        run: echo "Issue-ul a fost închis și blocat automat de GitHub Actions."

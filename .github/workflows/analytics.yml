@@ -1,0 +1,41 @@
+name: Repository Analytics
+
+on:
+  schedule:
+    # Zilnic la 06:00 UTC (09:00 Romania)
+    - cron: "0 6 * * *"
+  workflow_dispatch: # Permite rulare manuală din interfața GitHub
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Collect analytics
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_ANALYTICS }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python .github/scripts/collect_analytics.py
+
+      - name: Commit updated stats
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/analytics/stats.json statistici/shields/
+          # Comitem doar dacă există modificări
+          git diff --staged --quiet || git commit -m "analytics: actualizare zilnică $(date -u +%d.%m.%Y)"
+          git push

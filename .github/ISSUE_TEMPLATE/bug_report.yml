@@ -1,0 +1,95 @@
+name: Raportare problemă
+description: Raportați o problemă legată de integrarea Hidroelectrica.
+title: "Descriere scurtă a problemei"
+labels: ajutor necesar
+body:
+  - type: markdown
+    attributes:
+      value: >
+        ⚠️ **ATENȚIE:** ⚠️
+
+        Înainte de a raporta o problemă, te rog să verifici secțiunea [FAQ.md](https://github.com/cnecrea/hidroelectrica/blob/main/FAQ.md) pentru a vedea dacă problema este deja explicată sau are o soluție.  
+
+        Acest lucru mă ajută să evit raportările duplicate și să rezolv problemele mai eficient.  
+        
+        Dacă problema persistă, completează informațiile de mai jos.
+        
+  - type: dropdown
+    id: citit_faq
+    attributes:
+      label: Ați citit secțiunea FAQ.md?
+      description: Te rog să confirmi dacă ai citit fișierul FAQ.md înainte de a raporta problema.
+      options:
+        - "Nu, nu am citit secțiunea FAQ.md."
+        - "Da, am citit secțiunea FAQ.md și nu am găsit răspunsul la problema mea."
+    validations:
+      required: true
+
+  - type: textarea
+    id: descriere
+    attributes:
+      label: Descrieți problema
+      description: |
+        Explicați clar ce s-a întâmplat, inclusiv pașii pentru a reproduce problema. 
+        **Nu introduceți logurile aici.** Logurile trebuie raportate în secțiunea dedicată de mai jos.
+      placeholder: "Descrieți aici problema (fără loguri)"
+    validations:
+      required: true
+
+  - type: input
+    id: versiune
+    attributes:
+      label: Versiunea integrării
+      description: Specificați versiunea actuală instalată (o puteți verifica în `custom_components/hidroelectrica/manifest.json`).
+      placeholder: "Exemplu: 2.0.0"
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: >
+        &nbsp;
+
+  - type: markdown
+    attributes:
+      value: >
+        ---
+
+  - type: textarea
+    id: loguri
+    attributes:
+      label: Loguri relevante
+      description: |
+        Adăugați logurile relevante pentru problemă. Utilizați formatul următor:
+        ```yaml
+        # Exemplu:
+        2025-01-14 03:08:37.818 ERROR (MainThread) [custom_components.hidroelectrica.sensor] Eroare la parsarea sumei: 1.580,10
+        ```
+
+        Dacă nu știți cum să activați modul debug și să colectați logurile relevante,
+        vă rugăm să consultați [ghidul pentru debugging](https://github.com/cnecrea/hidroelectrica/blob/main/DEBUG.md).
+        
+        După ce ați activat modul debug, reporniți Home Assistant și reproduceți problema,
+        apoi copiați logurile generate din fișierul `home-assistant.log`.
+
+      render: yaml
+    validations:
+      required: true
+
+  - type: dropdown
+    id: restart
+    attributes:
+      label: Ați încercat să dați restart?
+      description: Confirmă dacă ați încercat să dați restart la Home Assistant.
+      options:
+        - "Da"
+        - "Nu"
+    validations:
+      required: true
+
+  - type: input
+    id: sistem_operare
+    attributes:
+      label: Sistem de operare
+      description: Specificați sistemul de operare utilizat (ex. Home Assistant OS, Docker, etc.).
+      placeholder: "Exemplu: Home Assistant OS"
