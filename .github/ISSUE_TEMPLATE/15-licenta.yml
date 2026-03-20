@@ -1,6 +1,6 @@
 name: Licențiere
 description: Cereri de licență nouă, probleme de activare sau erori de validare a licenței.
-title: "[LICENȚĂ] "
+title: "[LICENSE] "
 labels:
   - licență
 body:
