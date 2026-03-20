@@ -1,7 +1,7 @@
 {
   "repo": "",
   "prima_colectare": "",
-  "ultima_actualizare": "2026-03-20T06:47:21Z",
+  "ultima_actualizare": "2026-03-20T12:50:38Z",
   "zilnic": {
     "2026-03-01": {
       "clones_total": 2,
@@ -291,7 +291,11 @@
           "vizite": 1,
           "vizitatori_unici": 1
         }
-      ]
+      ],
+      "clones_total": 68,
+      "clones_unice": 29,
+      "views_total": 11,
+      "views_unice": 8
     },
     "2026-03-20": {
       "stars": 80,
@@ -306,8 +310,8 @@
         },
         {
           "sursa": "Google",
-          "vizite": 35,
-          "vizitatori_unici": 14
+          "vizite": 38,
+          "vizitatori_unici": 15
         },
         {
           "sursa": "DuckDuckGo",
