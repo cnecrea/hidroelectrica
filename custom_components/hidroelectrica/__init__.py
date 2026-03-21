@@ -320,12 +320,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
         _LOGGER.debug("[Hidroelectrica] Entry %s eliminat din hass.data", entry.entry_id)
 
-        # Verifică dacă mai sunt entry-uri active (ignoră cheile interne)
-        chei_interne = {LICENSE_DATA_KEY, "_cancel_heartbeat"}
-        entry_ids_ramase = {
-            k for k in hass.data.get(DOMAIN, {})
-            if k not in chei_interne
-        }
+        # Verifică dacă mai sunt entry-uri active (sursa de adevăr: config_entries)
+        entry_ids_ramase = [
+            e.entry_id
+            for e in hass.config_entries.async_entries(DOMAIN)
+            if e.entry_id != entry.entry_id
+        ]
 
         _LOGGER.debug(
             "[Hidroelectrica] Entry-uri rămase după unload: %d (%s)",
@@ -396,6 +396,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         notify_data = hass.data.pop(f"{DOMAIN}_notify", None)
         if notify_data and notify_data.get("fingerprint"):
             await _send_lifecycle_event(
+                hass,
                 notify_data["fingerprint"],
                 notify_data.get("license_key", ""),
                 "integration_removed",
@@ -403,7 +404,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def _send_lifecycle_event(
-    fingerprint: str, license_key: str, action: str
+    hass: HomeAssistant, fingerprint: str, license_key: str, action: str
 ) -> None:
     """Trimite un eveniment lifecycle direct (fără LicenseManager).
 
@@ -411,6 +412,7 @@ async def _send_lifecycle_event(
     """
     import hashlib
     import hmac as hmac_lib
+    import json
     import time
 
     import aiohttp
@@ -427,30 +429,29 @@ async def _send_lifecycle_event(
     }
     # HMAC cu fingerprint ca cheie (identic cu LicenseManager._compute_request_hmac)
     data = {k: v for k, v in payload.items() if k != "hmac"}
-    import json
     msg = json.dumps(data, sort_keys=True).encode()
     payload["hmac"] = hmac_lib.new(
         fingerprint.encode(), msg, hashlib.sha256
     ).hexdigest()
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{LICENSE_API_URL}/notify",
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=10),
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": "Hidroelectrica-HA-Integration/3.0",
-                },
-            ) as resp:
-                if resp.status == 200:
-                    result = await resp.json()
-                    if not result.get("success"):
-                        _LOGGER.warning(
-                            "[Hidroelectrica] Server a refuzat '%s': %s",
-                            action, result.get("error"),
-                        )
+        session = async_get_clientsession(hass)
+        async with session.post(
+            f"{LICENSE_API_URL}/notify",
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=10),
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Hidroelectrica-HA-Integration/3.0",
+            },
+        ) as resp:
+            if resp.status == 200:
+                result = await resp.json()
+                if not result.get("success"):
+                    _LOGGER.warning(
+                        "[Hidroelectrica] Server a refuzat '%s': %s",
+                        action, result.get("error"),
+                    )
     except Exception as err:  # noqa: BLE001
         _LOGGER.debug("[Hidroelectrica] Nu s-a putut raporta '%s': %s", action, err)
 
@@ -477,6 +478,10 @@ async def async_migrate_entry(
             "select_all": False,
             CONF_SELECTED_ACCOUNTS: [],
         }
+
+        # Preservă token-ul de autentificare (dacă există)
+        if old_data.get("token_data"):
+            new_data["token_data"] = old_data["token_data"]
 
         _LOGGER.info(
             "Migrare entry %s: v%s → v3.",

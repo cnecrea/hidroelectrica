@@ -15,7 +15,7 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import ATTRIBUTION, DOMAIN
+from .const import ATTRIBUTION, DOMAIN, LICENSE_DATA_KEY
 from .coordinator import HidroelectricaCoordinator
 from .helpers import (
     MONTHS_NUM_RO,
@@ -493,6 +493,14 @@ class HidroelectricaEntity(
         self._custom_entity_id: str | None = None
 
     @property
+    def _license_valid(self) -> bool:
+        """Verifică dacă licența este validă."""
+        mgr = self.hass.data.get(DOMAIN, {}).get(LICENSE_DATA_KEY)
+        if mgr is None:
+            return False
+        return mgr.is_valid
+
+    @property
     def entity_id(self) -> str | None:
         return self._custom_entity_id
 
@@ -719,6 +727,8 @@ class DateContractSensor(HidroelectricaEntity):
 
     @property
     def native_value(self) -> str | None:
+        if not self._license_valid:
+            return "Licență necesară"
         data = self.coordinator.data
         if not data:
             return None
@@ -726,6 +736,8 @@ class DateContractSensor(HidroelectricaEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._license_valid:
+            return {"licență": "necesară"}
         data = self.coordinator.data
         if not data:
             return {"attribution": ATTRIBUTION}
@@ -847,6 +859,8 @@ class SoldFacturaSensor(HidroelectricaEntity):
     @property
     def native_value(self) -> str:
         """Stare: 'Da' (sold de plată), 'Nu' (achitat), 'Credit' (prosumator)."""
+        if not self._license_valid:
+            return "Licență necesară"
         bill = _get_bill_result(self.coordinator.data)
         if not bill:
             return "Nu"
@@ -863,6 +877,8 @@ class SoldFacturaSensor(HidroelectricaEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._license_valid:
+            return {"licență": "necesară"}
         bill = _get_bill_result(self.coordinator.data)
         if not bill:
             return {"attribution": ATTRIBUTION}
@@ -961,10 +977,14 @@ class FacturaRestantaSensor(HidroelectricaEntity):
 
     @property
     def native_value(self) -> str:
+        if not self._license_valid:
+            return "Licență necesară"
         return "Da" if self._is_overdue() else "Nu"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._license_valid:
+            return {"licență": "necesară"}
         data = self.coordinator.data
         if not data:
             return {
@@ -1044,6 +1064,8 @@ class IndexEnergieSensor(HidroelectricaEntity):
 
     @property
     def native_value(self):
+        if not self._license_valid:
+            return "Licență necesară"
         data = self.coordinator.data
         if not data:
             return 0
@@ -1083,6 +1105,8 @@ class IndexEnergieSensor(HidroelectricaEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._license_valid:
+            return {"licență": "necesară"}
         data = self.coordinator.data
         if not data:
             return {"attribution": ATTRIBUTION}
@@ -1198,6 +1222,8 @@ class IndexEnergieProdusSensor(HidroelectricaEntity):
 
     @property
     def native_value(self):
+        if not self._license_valid:
+            return "Licență necesară"
         data = self.coordinator.data
         if not data:
             return 0
@@ -1214,6 +1240,8 @@ class IndexEnergieProdusSensor(HidroelectricaEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._license_valid:
+            return {"licență": "necesară"}
         data = self.coordinator.data
         if not data:
             return {"attribution": ATTRIBUTION}
@@ -1294,10 +1322,14 @@ class CitirePermisaSensor(HidroelectricaEntity):
 
     @property
     def native_value(self) -> str:
+        if not self._license_valid:
+            return "Licență necesară"
         return "Da" if self._is_window_open() else "Nu"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._license_valid:
+            return {"licență": "necesară"}
         data = self.coordinator.data
         if not data:
             return {"attribution": ATTRIBUTION}
@@ -1386,6 +1418,8 @@ class ArhivaConsumSensor(HidroelectricaEntity):
 
     @property
     def native_value(self):
+        if not self._license_valid:
+            return "Licență necesară"
         entries = self._get_entries()
         if not entries:
             return 0
@@ -1403,6 +1437,8 @@ class ArhivaConsumSensor(HidroelectricaEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._license_valid:
+            return {"licență": "necesară"}
         attrs: dict[str, Any] = {"attribution": ATTRIBUTION}
         entries = self._get_entries()
 
@@ -1480,10 +1516,14 @@ class ArhivaIndexSensor(HidroelectricaEntity):
 
     @property
     def native_value(self):
+        if not self._license_valid:
+            return "Licență necesară"
         return len(self._get_entries())
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._license_valid:
+            return {"licență": "necesară"}
         attrs: dict[str, Any] = {}
         entries = self._get_entries()
 
@@ -1545,10 +1585,14 @@ class ArhivaIndexProdusSensor(HidroelectricaEntity):
 
     @property
     def native_value(self):
+        if not self._license_valid:
+            return "Licență necesară"
         return len(self._get_entries())
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._license_valid:
+            return {"licență": "necesară"}
         attrs: dict[str, Any] = {}
         entries = self._get_entries()
 
@@ -1612,10 +1656,14 @@ class ArhivaPlatiSensor(HidroelectricaEntity):
 
     @property
     def native_value(self):
+        if not self._license_valid:
+            return "Licență necesară"
         return len(self._get_entries())
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._license_valid:
+            return {"licență": "necesară"}
         attrs: dict[str, Any] = {}
         entries = self._get_entries()
 
@@ -1692,10 +1740,14 @@ class ArhivaPlatiProsumatorSensor(HidroelectricaEntity):
 
     @property
     def native_value(self):
+        if not self._license_valid:
+            return "Licență necesară"
         return len(self._get_entries())
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._license_valid:
+            return {"licență": "necesară"}
         attrs: dict[str, Any] = {}
         entries = self._get_entries()
 
