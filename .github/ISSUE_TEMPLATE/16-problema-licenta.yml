@@ -1,8 +1,8 @@
 name: Problemă licență
 description: Probleme de activare sau erori de validare a licenței.
-title: "[LICENȚĂ] "
+title: "[LICENTA] "
 labels:
-  - licență
+  - problemă licență
 body:
   - type: markdown
     attributes:
@@ -19,7 +19,6 @@ body:
       label: Tipul cererii
       description: Selectați ce tip de problemă aveți.
       options:
-        - Problemă de activare
         - Eroare de validare a licenței
     validations:
       required: true
