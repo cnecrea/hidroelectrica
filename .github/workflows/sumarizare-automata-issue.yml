@@ -6,7 +6,7 @@ on:
 
 jobs:
   sumar:
-    if: "!contains(github.event.issue.labels.*.name, 'licență')"
+    if: "!contains(github.event.issue.labels.*.name, 'licență') && !contains(github.event.issue.labels.*.name, 'problemă licență')"
     runs-on: ubuntu-latest
     permissions:
       issues: write
