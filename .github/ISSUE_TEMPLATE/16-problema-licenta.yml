@@ -1,0 +1,65 @@
+name: Problemă licență
+description: Probleme de activare sau erori de validare a licenței.
+title: "[LICENȚĂ] "
+labels:
+  - licență
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Completați formularul de mai jos dacă aveți o problemă cu o licență existentă:
+        - **Problemă de activare** — ați primit licența, dar nu se activează
+        - **Eroare de validare** — integrarea afișează erori legate de licență
+
+        > **Confidențialitate:** adresa de email introdusă mai jos va fi redactată automat din această pagină în câteva secunde după trimitere și va fi transmisă confidențial doar dezvoltatorului.
+
+  - type: dropdown
+    id: tip_cerere
+    attributes:
+      label: Tipul cererii
+      description: Selectați ce tip de problemă aveți.
+      options:
+        - Problemă de activare
+        - Eroare de validare a licenței
+    validations:
+      required: true
+
+  - type: dropdown
+    id: integrare
+    attributes:
+      label: Integrarea vizată
+      description: Pentru care integrare raportați problema?
+      options:
+        - Hidroelectrica
+
+    validations:
+      required: true
+
+  - type: input
+    id: email
+    attributes:
+      label: Adresa de email
+      description: |
+        Adresa asociată licenței. Va fi redactată automat din issue pentru confidențialitate.
+      placeholder: "exemplu@email.com"
+    validations:
+      required: true
+
+  - type: input
+    id: cheie_licenta
+    attributes:
+      label: Cheia de licență
+      description: Cheia de licență pe care ați primit-o.
+      placeholder: "Exemplu: HDEL-A3F2-9B1C-E7D4-52A8"
+    validations:
+      required: true
+
+  - type: textarea
+    id: descriere
+    attributes:
+      label: Descrierea problemei
+      description: |
+        Descrieți eroarea întâmpinată, ce ați încercat și ce mesaj afișează integrarea.
+      placeholder: "Descrieți problema dvs. aici..."
+    validations:
+      required: true
