@@ -1,0 +1,93 @@
+name: Procesare problemă licență
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  procesare-problema:
+    if: contains(github.event.issue.labels.*.name, 'problemă licență')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Redactare email
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+            const issueNumber = context.issue.number;
+            const issueTitle = context.payload.issue.title;
+            const issueAuthor = context.payload.issue.user.login;
+
+            // ── Extragere email din formularul structurat ──
+            const emailMatch = body.match(/### Adresa de email\s*\n\s*\n\s*([^\n]+)/);
+            const email = emailMatch ? emailMatch[1].trim() : '';
+
+            // ── Extragere integrare ──
+            const integrareMatch = body.match(/### Integrarea vizată\s*\n\s*\n\s*([^\n]+)/);
+            const integrare = integrareMatch ? integrareMatch[1].trim() : 'nespecificată';
+
+            // ── Extragere tip cerere ──
+            const tipMatch = body.match(/### Tipul cererii\s*\n\s*\n\s*([^\n]+)/);
+            const tipCerere = tipMatch ? tipMatch[1].trim() : 'nespecificat';
+
+            // ── Redactare email din body-ul issue-ului ──
+            if (email && email.includes('@')) {
+              const redacted = body.replace(
+                email,
+                '`[adresă redactată — transmisă confidențial dezvoltatorului]`'
+              );
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: redacted
+              });
+              console.log('Email redactat din issue body');
+            } else {
+              console.log('Niciun email valid găsit în issue body');
+            }
+
+            // ── Salvare email în fișier pentru artifact ──
+            const fs = require('fs');
+            fs.mkdirSync('artifact', { recursive: true });
+            fs.writeFileSync('artifact/email-info.txt', [
+              `Issue:      #${issueNumber}`,
+              `Titlu:      ${issueTitle}`,
+              `Autor:      @${issueAuthor}`,
+              `Integrare:  ${integrare}`,
+              `Tip cerere: ${tipCerere}`,
+              `Email:      ${email || 'N/A'}`,
+              `Data:       ${new Date().toISOString()}`
+            ].join('\n'));
+
+            // ── Mascarea emailului din logurile workflow-ului ──
+            if (email) core.setSecret(email);
+
+            // ── Comentariu automat (doar confirmare, fără text de susținere) ──
+            const comment = [
+              `Mulțumim pentru raportare, @${issueAuthor}.`,
+              ``,
+              `Cererea a fost înregistrată și va fi analizată în cel mai scurt timp.`,
+              ``,
+              `---`,
+              `*Adresa de email a fost redactată automat din acest issue pentru confidențialitate.*`
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: comment
+            });
+
+            console.log('Comentariu publicat cu succes');
+
+      - name: Upload email confidențial
+        uses: actions/upload-artifact@v4
+        with:
+          name: problema-licenta-email-${{ github.event.issue.number }}
+          path: artifact/
+          retention-days: 90
