@@ -1,16 +1,13 @@
-name: Licențiere
-description: Cereri de licență nouă, probleme de activare sau erori de validare a licenței.
-title: "[LICENSE] "
+name: Licență nouă
+description: Doriți să susțineți proiectul și să primiți o licență.
+title: "[LICENȚĂ] "
 labels:
   - licență
 body:
   - type: markdown
     attributes:
       value: |
-        Completați formularul de mai jos în funcție de situația dvs.:
-        - **Licență nouă** — doriți să susțineți proiectul și să primiți o licență
-        - **Problemă de activare** — ați primit licența, dar nu se activează
-        - **Eroare de validare** — integrarea afișează erori legate de licență
+        Completați formularul de mai jos pentru a solicita o licență nouă.
 
         > **Confidențialitate:** adresa de email introdusă mai jos va fi redactată automat din această pagină în câteva secunde după trimitere și va fi transmisă confidențial doar dezvoltatorului.
 
@@ -18,11 +15,9 @@ body:
     id: tip_cerere
     attributes:
       label: Tipul cererii
-      description: Selectați ce tip de solicitare aveți.
+      description: Acest formular este destinat exclusiv cererilor de licență nouă.
       options:
         - Licență nouă
-        - Problemă de activare
-        - Eroare de validare a licenței
     validations:
       required: true
 
@@ -30,7 +25,7 @@ body:
     id: integrare
     attributes:
       label: Integrarea vizată
-      description: Pentru care integrare solicitați licența sau raportați problema?
+      description: Pentru care integrare solicitați licența?
       options:
         - Hidroelectrica
     validations:
@@ -43,25 +38,5 @@ body:
       description: |
         Adresa pe care doriți să primiți licența. Va fi redactată automat din issue pentru confidențialitate.
       placeholder: "exemplu@email.com"
-    validations:
-      required: true
-
-  - type: input
-    id: cheie_licenta
-    attributes:
-      label: Cheia de licență (dacă aveți una)
-      description: Completați doar dacă aveți deja o cheie și raportați o problemă de activare sau validare.
-      placeholder: "Exemplu: HDEL-A3F2-9B1C-E7D4-52A8"
-    validations:
-      required: false
-
-  - type: textarea
-    id: descriere
-    attributes:
-      label: Descrierea situației
-      description: |
-        - Pentru licență nouă: menționați dacă ați efectuat contribuția prin Buy Me a Coffee.
-        - Pentru probleme: descrieți eroarea, ce ați încercat și ce mesaj afișează integrarea.
-      placeholder: "Descrieți situația dvs. aici..."
     validations:
       required: true
