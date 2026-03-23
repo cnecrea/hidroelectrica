@@ -343,14 +343,18 @@ def build_usage_entity(
     Returns:
         Dicționar cu structura completă a entității de consum
     """
+    # Structura EXACTĂ din payload-ul care a returnat 200 OK (debug 23.03.2026).
+    # Key-urile trebuie să fie IDENTICE cu cele din GetPreviousMeterRead response,
+    # NU redenumite (ex: contractAccountID, NU UtilityAccountNumber).
     return {
-        "UtilityAccountNumber": safe_get(previous_read, "contractAccountID", default=""),
+        "contractAccountID": safe_get(previous_read, "contractAccountID", default=""),
+        "accountID": safe_get(previous_read, "accountID", default=""),
         "equipmentNo": safe_get(previous_read, "equipmentNo", default=""),
         "registerNo": safe_get(previous_read, "registerNo", default=""),
         "registerType": safe_get(previous_read, "registerType", default=""),
-        "uom": safe_get(previous_read, "uom", default=""),
-        "preDecimals": safe_get(previous_read, "preDecimals", default=0),
-        "postDecimals": safe_get(previous_read, "postDecimals", default=0),
+        "uom": safe_get(previous_read, "uom", default="KWH"),
+        "preDecimals": safe_get(previous_read, "preDecimals", default=""),
+        "postDecimals": safe_get(previous_read, "postDecimals", default=""),
         "noMROrder": safe_get(previous_read, "noMROrder", default=""),
         "prevMRResult": safe_get(previous_read, "prevMRResult", default=""),
         "prevMRDate": safe_get(previous_read, "prevMRDate", default=""),

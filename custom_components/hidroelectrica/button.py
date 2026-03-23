@@ -13,7 +13,7 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, LICENSE_DATA_KEY
 from .coordinator import HidroelectricaCoordinator
 from .helpers import build_usage_entity, safe_get
 
@@ -39,6 +39,15 @@ async def async_setup_entry(
         DOMAIN,
         config_entry.entry_id,
     )
+
+    # Fără licență validă, nu creăm butoane
+    mgr = hass.data.get(DOMAIN, {}).get(LICENSE_DATA_KEY)
+    if not mgr or not mgr.is_valid:
+        _LOGGER.info(
+            "Licență invalidă: nu se creează butoane (entry_id=%s).",
+            config_entry.entry_id,
+        )
+        return
 
     entities: list[ButtonEntity] = []
 
@@ -190,7 +199,8 @@ class TrimiteIndexButton(
                 return
 
             # Data curentă pentru NewMeterReadDate
-            now_str = datetime.now().strftime("%m/%d/%Y %H:%M:%S")
+            # Format DD/MM/YYYY — confirmat prin debug (SubmitSelfMeterRead 200 OK)
+            now_str = datetime.now().strftime("%d/%m/%Y")
 
             # Construim entitățile de consum (una per registru)
             usage_entities = []

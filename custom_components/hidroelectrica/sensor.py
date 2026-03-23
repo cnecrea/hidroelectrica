@@ -190,6 +190,39 @@ def _get_window_data(data: dict | None) -> dict:
     return {}
 
 
+def _compute_closing_date(wd: dict) -> str:
+    """Calculează data corectă de închidere a ferestrei de autocitire.
+
+    API-ul returnează:
+      - OpeningDate: "22"               (zi deschidere, luna curentă)
+      - ClosingDate: "26"               (zi închidere)
+      - NextMonthOpeningDate: "22/04/2026"  (data completă deschidere viitoare)
+      - NextMonthClosingDate: "26/03/2026"  (ATENȚIE: luna e GREȘITĂ/curentă!)
+
+    NextMonthClosingDate este nesigur — folosește luna curentă, nu luna viitoare.
+    Soluția: luăm luna+anul din NextMonthOpeningDate și ziua din ClosingDate.
+
+    Exemplu: NextMonthOpeningDate="22/04/2026", ClosingDate="26"
+             → closing_date = "26/04/2026"
+    """
+    closing_day = wd.get("ClosingDate", "")
+    next_opening = wd.get("NextMonthOpeningDate", "")
+
+    if closing_day and next_opening:
+        try:
+            # NextMonthOpeningDate = "DD/MM/YYYY"
+            parts = next_opening.split("/")
+            if len(parts) == 3:
+                month = parts[1]
+                year = parts[2]
+                return f"{closing_day.zfill(2)}/{month}/{year}"
+        except (ValueError, IndexError):
+            pass
+
+    # Fallback pe NextMonthClosingDate dacă calculul eșuează
+    return wd.get("NextMonthClosingDate", "")
+
+
 def _get_pods_list(data: dict | None) -> list:
     """Extrage lista de PODs din GetPods.
 
@@ -522,13 +555,31 @@ class HidroelectricaEntity(
 # ──────────────────────────────────────────────
 # _build_sensors_for_coordinator
 # ──────────────────────────────────────────────
+def _is_license_valid(hass: HomeAssistant) -> bool:
+    """Verifică dacă licența integrării este validă."""
+    mgr = hass.data.get(DOMAIN, {}).get(LICENSE_DATA_KEY)
+    return mgr is not None and mgr.is_valid
+
+
 def _build_sensors_for_coordinator(
     coordinator: HidroelectricaCoordinator,
     config_entry: ConfigEntry,
+    hass: HomeAssistant,
 ) -> list[SensorEntity]:
-    """Construiește lista de senzori pentru un coordinator (un cont)."""
-    sensors: list[SensorEntity] = []
+    """Construiește lista de senzori pentru un coordinator (un cont).
+
+    Dacă licența NU este validă, returnează DOAR LicentaNecesaraSensor.
+    """
     uan = coordinator.uan
+
+    # ── Verificare licență ──
+    if not _is_license_valid(hass):
+        _LOGGER.info(
+            "Licență invalidă: se creează doar LicentaNecesaraSensor (UAN=%s).", uan,
+        )
+        return [LicentaNecesaraSensor(coordinator, config_entry)]
+
+    sensors: list[SensorEntity] = []
 
     # ── 1. Senzori de bază (mereu prezenți) ──
     sensors.append(DateContractSensor(coordinator, config_entry))
@@ -686,7 +737,7 @@ async def async_setup_entry(
     all_sensors: list[SensorEntity] = []
 
     for uan, coordinator in coordinators.items():
-        sensors = _build_sensors_for_coordinator(coordinator, config_entry)
+        sensors = _build_sensors_for_coordinator(coordinator, config_entry, hass)
         _LOGGER.debug("Se adaugă %s senzori pentru contul %s.", len(sensors), uan)
         all_sensors.extend(sensors)
 
@@ -701,6 +752,44 @@ async def async_setup_entry(
 # ══════════════════════════════════════════════
 # SENZORI
 # ══════════════════════════════════════════════
+
+
+# ──────────────────────────────────────────────
+# LicentaNecesaraSensor
+# Senzor unic afișat când integrarea NU are licență validă.
+# Înlocuiește TOȚI senzorii normali — un singur senzor informativ.
+# ──────────────────────────────────────────────
+class LicentaNecesaraSensor(HidroelectricaEntity):
+    """Senzor informativ afișat când licența nu este validă.
+
+    Când integrarea nu are licență, NU se creează senzorii normali.
+    Se creează doar acest senzor care afișează 'Licență necesară'.
+    """
+
+    _attr_icon = "mdi:license"
+    _attr_translation_key = "licenta_necesara"
+
+    def __init__(self, coordinator, config_entry):
+        super().__init__(coordinator, config_entry)
+        self._attr_name = "Hidroelectrica"
+        self._attr_unique_id = f"{DOMAIN}_licenta_{self._uan}"
+        self._custom_entity_id = f"sensor.{DOMAIN}_{self._uan}_licenta"
+
+    @property
+    def native_value(self) -> str:
+        return "Licență necesară"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "Cod încasare": self._uan,
+            "status": "Licență necesară",
+            "info": (
+                "Pentru a activa senzorii, este necesară o licență validă. "
+                "Vizitați https://hubinteligent.org pentru mai multe detalii."
+            ),
+            "attribution": ATTRIBUTION,
+        }
 
 
 # ──────────────────────────────────────────────
@@ -857,7 +946,7 @@ class SoldFacturaSensor(HidroelectricaEntity):
         self._custom_entity_id = f"sensor.{DOMAIN}_{self._uan}_sold_factura"
 
     @property
-    def native_value(self) -> str:
+    def native_value(self) -> str | None:
         """Stare: 'Da' (sold de plată), 'Nu' (achitat), 'Credit' (prosumator)."""
         if not self._license_valid:
             return "Licență necesară"
@@ -976,7 +1065,7 @@ class FacturaRestantaSensor(HidroelectricaEntity):
         return False
 
     @property
-    def native_value(self) -> str:
+    def native_value(self) -> str | None:
         if not self._license_valid:
             return "Licență necesară"
         return "Da" if self._is_overdue() else "Nu"
@@ -1065,7 +1154,7 @@ class IndexEnergieSensor(HidroelectricaEntity):
     @property
     def native_value(self):
         if not self._license_valid:
-            return "Licență necesară"
+            return None
         data = self.coordinator.data
         if not data:
             return 0
@@ -1184,7 +1273,7 @@ class IndexEnergieSensor(HidroelectricaEntity):
             is_open = is_open_raw == "1"
             attrs["Autorizat să citească contorul"] = "Da" if is_open else "Nu"
             open_date = wd.get("NextMonthOpeningDate", "")
-            close_date = wd.get("NextMonthClosingDate", "")
+            close_date = _compute_closing_date(wd)
             if open_date and close_date:
                 attrs["Perioadă transmitere index"] = f"{open_date} — {close_date}"
             if close_date:
@@ -1223,7 +1312,7 @@ class IndexEnergieProdusSensor(HidroelectricaEntity):
     @property
     def native_value(self):
         if not self._license_valid:
-            return "Licență necesară"
+            return None
         data = self.coordinator.data
         if not data:
             return 0
@@ -1321,7 +1410,7 @@ class CitirePermisaSensor(HidroelectricaEntity):
         return False
 
     @property
-    def native_value(self) -> str:
+    def native_value(self) -> str | None:
         if not self._license_valid:
             return "Licență necesară"
         return "Da" if self._is_window_open() else "Nu"
@@ -1339,7 +1428,7 @@ class CitirePermisaSensor(HidroelectricaEntity):
 
         if wd:
             open_date = wd.get("NextMonthOpeningDate", "")
-            close_date = wd.get("NextMonthClosingDate", "")
+            close_date = _compute_closing_date(wd)
 
             if open_date and close_date:
                 attrs["Perioadă transmitere index"] = f"{open_date} — {close_date}"

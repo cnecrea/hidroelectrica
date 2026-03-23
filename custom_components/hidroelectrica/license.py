@@ -95,6 +95,7 @@ class LicenseManager:
         self._data: dict[str, Any] = {}
         self._fingerprint: str = ""
         self._loaded = False
+        self._hmac_retry_done = False
         # Token de status primit de la server (cache local)
         self._status_token: dict[str, Any] = {}
 
@@ -141,11 +142,35 @@ class LicenseManager:
         await self.async_check_status()
 
         self._loaded = True
+        final_status = self.status
         _LOGGER.debug(
             "[Hidroelectrica:License] async_load() finalizat — status=%s, is_valid=%s",
-            self.status,
+            final_status,
             self.is_valid,
         )
+
+        # Log-uri explicite pentru fiecare status — vizibile în /logs
+        if final_status == "licensed":
+            key = self._data.get("license_key", "?")
+            _LOGGER.info(
+                "[Hidroelectrica:License] ✓ Licență ACTIVĂ (cheie: %s)", key
+            )
+        elif final_status == "trial":
+            days = self.trial_days_remaining
+            _LOGGER.info(
+                "[Hidroelectrica:License] ⏳ Perioadă de evaluare (trial): "
+                "%d zile rămase", days
+            )
+        elif final_status == "expired":
+            _LOGGER.warning(
+                "[Hidroelectrica:License] ✗ EXPIRAT — perioada de evaluare "
+                "sau licența a expirat. Senzorii nu vor funcționa."
+            )
+        else:
+            _LOGGER.warning(
+                "[Hidroelectrica:License] ✗ FĂRĂ LICENȚĂ (status=%s) — "
+                "senzorii nu vor funcționa.", final_status
+            )
 
     async def _async_save(self) -> None:
         """Salvează datele de licență."""
@@ -222,6 +247,9 @@ class LicenseManager:
             LICENSE_API_URL,
         )
 
+        # Resetează flag-ul de retry HMAC (permite un retry pe fiecare check ciclu)
+        self._hmac_retry_done = False
+
         # Trebuie să cerem status de la server
         timestamp = int(time.time())
         payload = {
@@ -283,18 +311,49 @@ class LicenseManager:
 
                     await self._async_save()
 
+                    server_status = result.get("status")
                     _LOGGER.debug(
                         "[Hidroelectrica:License] Status actualizat de la server — %s "
                         "(valid_until: %s)",
-                        result.get("status"),
+                        server_status,
                         result.get("valid_until"),
                     )
+
+                    # Log explicit de tranziție (vizibil în /logs)
+                    if server_status == "expired":
+                        _LOGGER.warning(
+                            "[Hidroelectrica:License] Server confirmă: EXPIRAT "
+                            "(trial_days_remaining=0)"
+                        )
+                    elif server_status == "trial":
+                        _LOGGER.info(
+                            "[Hidroelectrica:License] Server confirmă: TRIAL "
+                            "(zile rămase: %s)",
+                            result.get("trial_days_remaining", "?"),
+                        )
+
                     return result
 
-                _LOGGER.warning(
-                    "[Hidroelectrica:License] răspuns invalid de la /check — %s",
-                    result,
-                )
+                # Gestionare invalid_hmac — client_secret desincronizat
+                if result.get("error") == "invalid_hmac":
+                    if self._data.get("client_secret") and not self._hmac_retry_done:
+                        _LOGGER.warning(
+                            "[Hidroelectrica:License] HMAC invalid — client_secret "
+                            "desincronizat. Șterg secretul local și reîncerc..."
+                        )
+                        self._data.pop("client_secret", None)
+                        await self._async_save()
+                        self._hmac_retry_done = True
+                        return await self.async_check_status()  # Retry cu fingerprint
+                    _LOGGER.error(
+                        "[Hidroelectrica:License] HMAC invalid (retry epuizat). "
+                        "Serverul nu recunoaște acest dispozitiv."
+                    )
+                else:
+                    _LOGGER.warning(
+                        "[Hidroelectrica:License] răspuns invalid de la /check — %s",
+                        result,
+                    )
                 return self._status_token
 
         except aiohttp.ClientError as err:
