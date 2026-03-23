@@ -30,9 +30,30 @@
         }
     },
     "options": {
+        "error": {
+            "auth_failed": "Authentication failed. Check your username and password.",
+            "no_data": "No accounts found after login.",
+            "no_account_selected": "Please select at least one account.",
+            "unknown": "An unexpected error occurred.",
+            "license_key_empty": "Please enter a license key.",
+            "license_key_invalid": "Invalid license key. Check the format and try again.",
+            "license_already_used": "This license key has already been used on another installation.",
+            "license_key_expired": "This license key has expired.",
+            "license_fingerprint_mismatch": "This license key is bound to a different installation.",
+            "license_network_error": "Cannot connect to the license server. Check your internet connection.",
+            "license_server_error": "License server error. Please try again later."
+        },
         "step": {
             "init": {
                 "title": "Hidroelectrica Settings",
+                "description": "Select the category to manage",
+                "menu_options": {
+                    "setari": "Account Settings",
+                    "licenta": "License"
+                }
+            },
+            "setari": {
+                "title": "Account Settings",
                 "description": "Update your credentials and settings.",
                 "data": {
                     "username": "Username (email)",
@@ -47,13 +68,14 @@
                     "select_all": "Select all accounts",
                     "selected_accounts": "Accounts"
                 }
+            },
+            "licenta": {
+                "title": "Hidroelectrica License",
+                "description": "{license_status}\n\nEnter your license key to activate or renew the integration.",
+                "data": {
+                    "license_key": "License Key"
+                }
             }
-        },
-        "error": {
-            "auth_failed": "Authentication failed. Check your username and password.",
-            "no_data": "No accounts found after login.",
-            "no_account_selected": "Please select at least one account.",
-            "unknown": "An unexpected error occurred."
         }
     }
 }
