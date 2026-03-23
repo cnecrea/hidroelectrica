@@ -94,6 +94,7 @@ class LicenseManager:
         self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._data: dict[str, Any] = {}
         self._fingerprint: str = ""
+        self._hardware_fingerprint: str = ""
         self._loaded = False
         self._hmac_retry_done = False
         # Token de status primit de la server (cache local)
@@ -109,8 +110,15 @@ class LicenseManager:
     async def async_load(self) -> None:
         """Încarcă datele de licență din storage. Se apelează o singură dată."""
         _LOGGER.debug("[Hidroelectrica:License] Încep async_load()")
-        stored = await self._store.async_load()
-        self._data = dict(stored) if stored else {}
+        try:
+            stored = await self._store.async_load()
+            self._data = dict(stored) if stored else {}
+        except Exception:  # noqa: BLE001
+            _LOGGER.warning(
+                "[Hidroelectrica:License] Storage corupt sau ilizibil "
+                "— pornesc cu date goale (serverul va restaura starea)"
+            )
+            self._data = {}
         _LOGGER.debug(
             "[Hidroelectrica:License] Date din storage: %d chei (%s)",
             len(self._data),
@@ -120,8 +128,13 @@ class LicenseManager:
         self._fingerprint = await self._hass.async_add_executor_job(
             self._generate_fingerprint
         )
+        self._hardware_fingerprint = await self._hass.async_add_executor_job(
+            self._generate_hardware_fingerprint
+        )
         _LOGGER.debug(
-            "[Hidroelectrica:License] Fingerprint generat: %s...", self._fingerprint[:16]
+            "[Hidroelectrica:License] Fingerprint generat: %s... (hw: %s...)",
+            self._fingerprint[:16],
+            self._hardware_fingerprint[:16],
         )
 
         # Restaurează status token din cache (dacă există)
@@ -215,10 +228,33 @@ class LicenseManager:
         raw = "|".join(componente) + f"|{_FP_SALT}"
         return hashlib.sha256(raw.encode()).hexdigest()
 
+    def _generate_hardware_fingerprint(self) -> str:
+        """Generează un fingerprint hardware care supraviețuiește ștergerii .storage.
+
+        Bazat DOAR pe machine-id + salt (FĂRĂ HA UUID).
+        Previne abuzul: ștergere .storage/core.uuid → UUID nou → fingerprint
+        nou → trial gratuit nelimitat. hardware_fingerprint rămâne constant.
+        """
+        machine_id = ""
+        try:
+            mid_path = Path("/etc/machine-id")
+            if mid_path.exists():
+                machine_id = mid_path.read_text().strip()
+        except Exception:  # noqa: BLE001
+            pass
+
+        raw = f"hwfp:{machine_id}|{_FP_SALT}"
+        return hashlib.sha256(raw.encode()).hexdigest()
+
     @property
     def fingerprint(self) -> str:
         """Returnează fingerprint-ul hardware."""
         return self._fingerprint
+
+    @property
+    def hardware_fingerprint(self) -> str:
+        """Returnează hardware fingerprint-ul (anti-abuse)."""
+        return self._hardware_fingerprint
 
     # ─── Verificare status la server ───
 
@@ -256,6 +292,7 @@ class LicenseManager:
             "fingerprint": self._fingerprint,
             "timestamp": timestamp,
             "integration": INTEGRATION,
+            "hardware_fingerprint": self._hardware_fingerprint,
         }
         payload["hmac"] = self._compute_request_hmac(payload)
 
@@ -284,6 +321,13 @@ class LicenseManager:
                             "e invalidă — ignor răspunsul"
                         )
                         return self._status_token
+
+                    # Captează statusul vechi pentru detecție tranziție
+                    old_status = (
+                        self._status_token.get("status")
+                        if self._status_token
+                        else None
+                    )
 
                     # Salvează noul status token
                     self._status_token = result
@@ -331,6 +375,19 @@ class LicenseManager:
                             "(zile rămase: %s)",
                             result.get("trial_days_remaining", "?"),
                         )
+
+                    # Auto-reload dacă licența a expirat
+                    if (
+                        old_status in ("licensed", "trial")
+                        and server_status in ("expired", "unlicensed")
+                    ):
+                        _LOGGER.warning(
+                            "[Hidroelectrica:License] Licență expirată "
+                            "(%s → %s) — reload integrare",
+                            old_status,
+                            server_status,
+                        )
+                        await self._async_reload_entries()
 
                     return result
 
@@ -939,7 +996,10 @@ class LicenseManager:
         Fallback pe fingerprint dacă client_secret nu e disponibil încă
         (prima rulare, înainte de primul /check).
         """
-        data = {k: v for k, v in payload.items() if k != "hmac"}
+        data = {
+            k: v for k, v in payload.items()
+            if k not in ("hmac", "hardware_fingerprint")
+        }
         msg = json.dumps(data, sort_keys=True).encode()
         # Folosește client_secret dacă e disponibil (v3.1)
         hmac_key = self._data.get("client_secret") or self._fingerprint

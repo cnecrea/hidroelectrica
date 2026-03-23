@@ -51,6 +51,9 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
         self.account_number = account_number
         self._config_entry = config_entry
         self._refresh_counter: int = 0
+        # Salvăm generația token-ului la creare — dacă alt coordinator
+        # a făcut deja login proaspăt, nu invalidăm din nou.
+        self._startup_gen: int = api_client.token_generation
 
     @property
     def _is_heavy_refresh(self) -> bool:
@@ -103,8 +106,18 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
                 )
 
         try:
-            # Asigurăm autentificare validă
-            if not self.api_client.has_token:
+            # La primul refresh (startup), token-ul din storage e aproape
+            # sigur expirat server-side → forțăm re-login proaspăt.
+            # Altfel, toate request-urile paralele primesc 401 simultan.
+            # Verificăm _login_generation pentru a evita invalidarea
+            # token-ului proaspăt obținut de alt coordinator.
+            if self._refresh_counter == 0 and self._startup_gen == self.api_client.token_generation:
+                _LOGGER.debug(
+                    "Primul refresh — forțez login proaspăt (UAN=%s).", uan
+                )
+                self.api_client.invalidate_session()
+                await self.api_client.async_ensure_authenticated()
+            elif not self.api_client.has_token:
                 _LOGGER.debug(
                     "Token absent. Se autentifică (UAN=%s).", uan
                 )

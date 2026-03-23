@@ -97,6 +97,11 @@ class HidroelectricaApiClient:
         return self._session_token is not None
 
     @property
+    def token_generation(self) -> int:
+        """Generația curentă a token-ului (crește la fiecare login/inject)."""
+        return self._token_generation
+
+    @property
     def user_id(self) -> str | None:
         """Returnează UserID-ul obținut la autentificare."""
         return self._user_id

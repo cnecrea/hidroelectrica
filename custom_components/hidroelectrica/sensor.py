@@ -11,6 +11,7 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -199,23 +200,33 @@ def _compute_closing_date(wd: dict) -> str:
       - NextMonthOpeningDate: "22/04/2026"  (data completă deschidere viitoare)
       - NextMonthClosingDate: "26/03/2026"  (ATENȚIE: luna e GREȘITĂ/curentă!)
 
-    NextMonthClosingDate este nesigur — folosește luna curentă, nu luna viitoare.
-    Soluția: luăm luna+anul din NextMonthOpeningDate și ziua din ClosingDate.
+    Bug Hidroelectrica: NextMonthClosingDate NU se actualizează corect —
+    rămâne pe luna curentă în loc de luna viitoare.
 
-    Exemplu: NextMonthOpeningDate="22/04/2026", ClosingDate="26"
-             → closing_date = "26/04/2026"
+    Soluția: calculăm durata ferestrei (ClosingDate - OpeningDate) și
+    adăugăm zilele la NextMonthOpeningDate (care e mereu corect).
+
+    Exemplu: OpeningDate="22", ClosingDate="26" → durata = 4 zile
+             NextMonthOpeningDate="22/04/2026" + 4 zile = "26/04/2026"
     """
+    from datetime import datetime, timedelta
+
+    opening_day = wd.get("OpeningDate", "")
     closing_day = wd.get("ClosingDate", "")
     next_opening = wd.get("NextMonthOpeningDate", "")
 
-    if closing_day and next_opening:
+    if opening_day and closing_day and next_opening:
         try:
-            # NextMonthOpeningDate = "DD/MM/YYYY"
-            parts = next_opening.split("/")
-            if len(parts) == 3:
-                month = parts[1]
-                year = parts[2]
-                return f"{closing_day.zfill(2)}/{month}/{year}"
+            open_d = int(opening_day)
+            close_d = int(closing_day)
+            durata = close_d - open_d
+            if durata < 0:
+                # Fereastra trece peste granița lunii (ex: 28 → 2)
+                # Estimăm ~30 zile în lună
+                durata = (30 - open_d) + close_d
+            dt_opening = datetime.strptime(next_opening, "%d/%m/%Y")
+            dt_closing = dt_opening + timedelta(days=durata)
+            return dt_closing.strftime("%d/%m/%Y")
         except (ValueError, IndexError):
             pass
 
@@ -577,7 +588,33 @@ def _build_sensors_for_coordinator(
         _LOGGER.info(
             "Licență invalidă: se creează doar LicentaNecesaraSensor (UAN=%s).", uan,
         )
+        # Curăță senzorii normali orfani din Entity Registry
+        registru = er.async_get(hass)
+        licenta_uid = f"{DOMAIN}_licenta_{uan}"
+        for entry_reg in er.async_entries_for_config_entry(
+            registru, config_entry.entry_id
+        ):
+            if (
+                entry_reg.domain == "sensor"
+                and entry_reg.unique_id != licenta_uid
+            ):
+                registru.async_remove(entry_reg.entity_id)
+                _LOGGER.debug(
+                    "[Hidroelectrica] Senzor orfan eliminat (licență expirată): %s",
+                    entry_reg.entity_id,
+                )
         return [LicentaNecesaraSensor(coordinator, config_entry)]
+
+    # ── Curăță senzorul de licență orfan (dacă exista anterior) ──
+    registru = er.async_get(hass)
+    licenta_unique_id = f"{DOMAIN}_licenta_{uan}"
+    entitate_licenta = registru.async_get_entity_id("sensor", DOMAIN, licenta_unique_id)
+    if entitate_licenta is not None:
+        registru.async_remove(entitate_licenta)
+        _LOGGER.debug(
+            "[Hidroelectrica] Entitate LicentaNecesaraSensor orfană eliminată: %s",
+            entitate_licenta,
+        )
 
     sensors: list[SensorEntity] = []
 
