@@ -14,6 +14,9 @@ jobs:
     steps:
       - name: Redactare email și publicare răspuns
         uses: actions/github-script@v7
+        env:
+          LICENSE_API_URL: ${{ secrets.LICENSE_API_URL }}
+          LICENSE_ADMIN_KEY: ${{ secrets.LICENSE_ADMIN_KEY }}
         with:
           script: |
             const body = context.payload.issue.body || '';
@@ -65,6 +68,40 @@ jobs:
 
             // ── Mascarea emailului din logurile workflow-ului ──
             if (email) core.setSecret(email);
+
+            // ── Înregistrare cerere pe serverul de licențe ──
+            if (email && email.includes('@')) {
+              const apiUrl = process.env.LICENSE_API_URL;
+              const adminKey = process.env.LICENSE_ADMIN_KEY;
+              if (apiUrl && adminKey) {
+                try {
+                  const resp = await fetch(`${apiUrl}/license/v2/github/register-request`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'X-Admin-Key': adminKey,
+                    },
+                    body: JSON.stringify({
+                      repo: `${context.repo.owner}/${context.repo.repo}`,
+                      issue_number: issueNumber,
+                      github_user: issueAuthor,
+                      email: email,
+                      integration: integrare,
+                      request_type: tipCerere,
+                    }),
+                  });
+                  if (resp.ok) {
+                    console.log('Cerere înregistrată pe serverul de licențe');
+                  } else {
+                    console.log(`Eroare înregistrare cerere: ${resp.status}`);
+                  }
+                } catch (e) {
+                  console.log(`Nu s-a putut contacta serverul de licențe: ${e.message}`);
+                }
+              } else {
+                console.log('LICENSE_API_URL sau LICENSE_ADMIN_KEY lipsesc din secrets');
+              }
+            }
 
             // ── Comentariu automat ──
             const comment = [
