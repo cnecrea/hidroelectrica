@@ -88,6 +88,12 @@ class LicenseManager:
     5. async_heartbeat() — validare periodică (intervalul vine de la server)
     """
 
+    # Perioadă de grație după expirarea cache-ului (server inaccesibil).
+    # Permite funcționarea continuă cu token-ul verificat local (Ed25519).
+    # Serverul RĂMÂNE sursa de adevăr — grația acoperă doar indisponibilitatea temporară.
+    _GRACE_LICENSED_SEC: int = 72 * 3600   # 72h pentru licențe active (cu token Ed25519)
+    _GRACE_TRIAL_SEC: int = 24 * 3600      # 24h pentru trial (fără token local)
+
     def __init__(self, hass: HomeAssistant) -> None:
         """Inițializează managerul de licențe."""
         self._hass = hass
@@ -99,6 +105,10 @@ class LicenseManager:
         self._hmac_retry_done = False
         # Token de status primit de la server (cache local)
         self._status_token: dict[str, Any] = {}
+        # Flag anti-spam: logăm WARNING de cache expirat O SINGURĂ DATĂ
+        self._cache_expiry_warned = False
+        # Contor eșecuri consecutive la contactarea serverului (pentru backoff)
+        self._consecutive_failures: int = 0
 
     @property
     def _session(self) -> aiohttp.ClientSession:
@@ -355,6 +365,10 @@ class LicenseManager:
 
                     await self._async_save()
 
+                    # Reset failure tracking la succes
+                    self._consecutive_failures = 0
+                    self._cache_expiry_warned = False
+
                     server_status = result.get("status")
                     _LOGGER.debug(
                         "[Hidroelectrica:License] Status actualizat de la server — %s "
@@ -414,13 +428,21 @@ class LicenseManager:
                 return self._status_token
 
         except aiohttp.ClientError as err:
-            _LOGGER.error(
-                "[Hidroelectrica:License] eroare de rețea la verificare status — %s", err
+            self._consecutive_failures += 1
+            _LOGGER.warning(
+                "[Hidroelectrica:License] eroare de rețea la verificare status "
+                "(încercare #%d) — %s",
+                self._consecutive_failures,
+                err,
             )
             return self._status_token
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error(
-                "[Hidroelectrica:License] eroare neașteptată la verificare status — %s", err
+            self._consecutive_failures += 1
+            _LOGGER.warning(
+                "[Hidroelectrica:License] eroare neașteptată la verificare status "
+                "(încercare #%d) — %s",
+                self._consecutive_failures,
+                err,
             )
             return self._status_token
 
@@ -439,15 +461,63 @@ class LicenseManager:
 
         return time.time() < valid_until
 
+    def _is_within_grace_period(self) -> bool:
+        """Verifică dacă suntem în perioada de grație după expirarea cache-ului.
+
+        Scenariul: serverul e temporar inaccesibil (mentenanță, probleme de rețea).
+        Cache-ul a expirat (valid_until < now), dar:
+        - Licențiat (cu token Ed25519 verificabil local): 72h de grație
+        - Trial (fără token local): 24h de grație
+
+        IMPORTANT: Grația NU extinde o licență expirată real (expires_at depășit).
+        Se aplică DOAR pentru indisponibilitate temporară a serverului.
+        Serverul RĂMÂNE sursa de adevăr — la reconectare, decizia serverului prevalează.
+        """
+        if not self._status_token:
+            return False
+
+        valid_until = self._status_token.get("valid_until", 0)
+        if valid_until <= 0:
+            return False
+
+        now = time.time()
+
+        # Dacă cache-ul e încă valid, nu suntem în perioadă de grație
+        if now < valid_until:
+            return False
+
+        # Determină durata de grație pe baza ultimului status cunoscut
+        last_status = self._status_token.get("status", "unlicensed")
+
+        if last_status == "licensed":
+            # Verifică suplimentar: token-ul de activare nu a expirat real
+            token = self._data.get("activation_token")
+            if token and isinstance(token, dict):
+                expires_at = token.get("expires_at")
+                if expires_at and now > expires_at:
+                    # Licența a expirat real (data din token) — fără grație
+                    return False
+            grace_seconds = self._GRACE_LICENSED_SEC
+        elif last_status == "trial":
+            grace_seconds = self._GRACE_TRIAL_SEC
+        else:
+            # expired / unlicensed — fără grație
+            return False
+
+        return now < valid_until + grace_seconds
+
     # ─── Proprietăți de status (toate derivate din token-ul serverului) ───
 
     @property
     def is_trial_valid(self) -> bool:
-        """Verifică dacă perioada de evaluare e activă (conform server)."""
-        return (
-            self._status_token.get("status") == "trial"
-            and self._is_status_cache_valid()
-        )
+        """Verifică dacă perioada de evaluare e activă (conform server).
+
+        Acceptă și perioadă de grație: dacă cache-ul a expirat dar suntem
+        în grace period (server temporar inaccesibil), trial rămâne valid.
+        """
+        if self._status_token.get("status") != "trial":
+            return False
+        return self._is_status_cache_valid() or self._is_within_grace_period()
 
     @property
     def trial_days_remaining(self) -> int:
@@ -496,11 +566,25 @@ class LicenseManager:
         # Dacă cache-ul de status a expirat, licența e invalidă
         # (serverul controlează intervalul de verificare)
         if self._status_token and not self._is_status_cache_valid():
-            _LOGGER.warning(
-                "[Hidroelectrica:License] cache-ul de status a expirat — necesită "
-                "verificare la server"
-            )
-            return False
+            if self._is_within_grace_period():
+                if not self._cache_expiry_warned:
+                    valid_until = self._status_token.get("valid_until", 0)
+                    grace_end = valid_until + self._GRACE_LICENSED_SEC
+                    hours_left = max(0, int((grace_end - time.time()) / 3600))
+                    _LOGGER.warning(
+                        "[Hidroelectrica:License] cache expirat — funcționare în perioadă "
+                        "de grație (%d ore rămase). Se reîncearcă contactarea serverului.",
+                        hours_left,
+                    )
+                    self._cache_expiry_warned = True
+            else:
+                if not self._cache_expiry_warned:
+                    _LOGGER.warning(
+                        "[Hidroelectrica:License] cache expirat + perioadă de grație depășită "
+                        "— licență invalidă. Verificați conexiunea la server."
+                    )
+                    self._cache_expiry_warned = True
+                return False
 
         return True
 
@@ -508,18 +592,24 @@ class LicenseManager:
     def is_valid(self) -> bool:
         """Verifică dacă integrarea poate funcționa (licență SAU trial).
 
-        Prioritizează răspunsul serverului — dacă serverul confirmă
-        'licensed' sau 'trial' și cache-ul e valid, e suficient.
-        Asta acoperă scenariul backup/restore: storage local gol,
-        dar serverul recunoaște fingerprint-ul ca licențiat.
+        Ordinea de verificare (de la cel mai fiabil la fallback):
+        1. Cache valid + server confirmă 'licensed'/'trial' → True
+        2. Perioadă de grație activă (server inaccesibil, dar status era ok) → True
+        3. Fallback local: token Ed25519 valid + trial valid → True/False
         """
-        # Serverul e sursa de adevăr
+        # 1. Serverul e sursa de adevăr (cache valid)
         if self._status_token and self._is_status_cache_valid():
             server_status = self._status_token.get("status")
             if server_status in ("licensed", "trial"):
                 return True
 
-        # Fallback: verificare locală (token de activare + trial)
+        # 2. Perioadă de grație (server temporar inaccesibil)
+        if self._status_token and self._is_within_grace_period():
+            server_status = self._status_token.get("status")
+            if server_status in ("licensed", "trial"):
+                return True
+
+        # 3. Fallback: verificare locală (token de activare + trial)
         return self.is_licensed or self.is_trial_valid
 
     @property
@@ -577,6 +667,9 @@ class LicenseManager:
 
         Prioritizează răspunsul serverului (din status_token).
         Valori posibile: 'licensed', 'trial', 'expired', 'unlicensed'.
+
+        Când cache-ul e expirat dar suntem în perioadă de grație,
+        returnează ultimul status cunoscut (nu 'expired').
         """
         # Dacă avem status valid de la server, îl folosim
         if self._status_token and self._is_status_cache_valid():
@@ -584,7 +677,13 @@ class LicenseManager:
             if server_status in ("licensed", "trial", "expired"):
                 return server_status
 
-        # Dacă avem token de activare dar cache expirat
+        # Perioadă de grație — returnează ultimul status cunoscut
+        if self._status_token and self._is_within_grace_period():
+            server_status = self._status_token.get("status", "unlicensed")
+            if server_status in ("licensed", "trial"):
+                return server_status
+
+        # Dacă avem token de activare dar cache expirat (fără grație)
         if self._data.get("activation_token"):
             return "expired"
 
@@ -605,6 +704,13 @@ class LicenseManager:
 
         Folosit de __init__.py pentru a programa heartbeat-ul.
         Dacă nu avem informație de la server, implicit 4 ore (conservator).
+
+        Când cache-ul e expirat, folosește backoff exponențial:
+        - Prima încercare: 60s (reacție rapidă)
+        - Încercări 2-5: 300s (5 min)
+        - Încercări 6-12: 1800s (30 min)
+        - Încercări 13+: 3600s (1 oră)
+        Previne bombardarea unui server indisponibil.
         """
         if not self._status_token:
             return 4 * 3600  # 4 ore implicit (conservative)
@@ -613,7 +719,15 @@ class LicenseManager:
         remaining = valid_until - time.time()
 
         if remaining <= 0:
-            return 300  # 5 minute — trebuie verificat acum
+            # Cache expirat — backoff bazat pe eșecuri consecutive
+            failures = self._consecutive_failures
+            if failures <= 0:
+                return 60   # Prima verificare: reacție rapidă (1 min)
+            if failures <= 5:
+                return 300  # 5 minute
+            if failures <= 12:
+                return 1800  # 30 minute
+            return 3600  # 1 oră (nu bombardăm serverul)
 
         # Nu depăși 24h chiar dacă serverul zice mai mult
         return min(int(remaining), 24 * 3600)

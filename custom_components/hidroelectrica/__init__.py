@@ -10,7 +10,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import (
+    async_track_point_in_time,
+    async_track_time_interval,
+)
+from homeassistant.util import dt as dt_util
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .api import HidroelectricaApiClient
@@ -104,6 +108,71 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         hass.data[DOMAIN]["_cancel_heartbeat"] = cancel_heartbeat
         _LOGGER.debug("[Hidroelectrica] Heartbeat programat și stocat în hass.data")
+
+        # ── Timer precis la valid_until (zero gap la expirare cache) ──
+        def _schedule_cache_expiry_check(mgr_ref: LicenseManager) -> None:
+            """Programează un check EXACT la momentul expirării cache-ului.
+
+            Elimină complet fereastra dintre expirarea cache-ului și
+            următorul heartbeat periodic. La expirare, contactează
+            serverul imediat și declanșează reload dacă starea se schimbă.
+            """
+            # Anulează timer-ul anterior (dacă există)
+            cancel_prev = hass.data.get(DOMAIN, {}).pop(
+                "_cancel_cache_expiry", None
+            )
+            if cancel_prev:
+                cancel_prev()
+
+            valid_until = (mgr_ref._status_token or {}).get("valid_until")
+            if not valid_until or valid_until <= 0:
+                return
+
+            expiry_dt = dt_util.utc_from_timestamp(valid_until)
+            # Adaugă 2 secunde ca marjă (evită race condition cu cache check)
+            expiry_dt = expiry_dt + timedelta(seconds=2)
+
+            async def _on_cache_expiry(_now) -> None:
+                """Callback executat EXACT la expirarea cache-ului."""
+                mgr_now: LicenseManager | None = hass.data.get(
+                    DOMAIN, {}
+                ).get(LICENSE_DATA_KEY)
+                if not mgr_now:
+                    return
+
+                was_valid = mgr_now.is_valid
+                _LOGGER.debug(
+                    "[Hidroelectrica] Cache expirat — verific imediat la server"
+                )
+                await mgr_now.async_check_status()
+                now_valid = mgr_now.is_valid
+
+                if was_valid != now_valid:
+                    if now_valid:
+                        _LOGGER.info(
+                            "[Hidroelectrica] Licența a redevenit validă — reîncarc"
+                        )
+                    else:
+                        _LOGGER.warning(
+                            "[Hidroelectrica] Licența a devenit invalidă — reîncarc"
+                        )
+                    await mgr_now._async_reload_entries()
+
+                # Programează următorul check (dacă serverul a dat valid_until nou)
+                _schedule_cache_expiry_check(mgr_now)
+
+            cancel_expiry = async_track_point_in_time(
+                hass, _on_cache_expiry, expiry_dt
+            )
+            hass.data[DOMAIN]["_cancel_cache_expiry"] = cancel_expiry
+
+            _LOGGER.debug(
+                "[Hidroelectrica] Cache expiry timer programat la %s",
+                expiry_dt.isoformat(),
+            )
+
+        _schedule_cache_expiry_check(license_mgr)
+
 
         # ── Notificare re-enable (dacă a fost dezactivată anterior) ──
         was_disabled = hass.data.pop(f"{DOMAIN}_was_disabled", False)
@@ -359,6 +428,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if cancel_hb:
                 cancel_hb()
                 _LOGGER.debug("[Hidroelectrica] Heartbeat periodic oprit")
+
+            # Oprește timer-ul de cache expiry
+            cancel_ce = hass.data[DOMAIN].pop("_cancel_cache_expiry", None)
+            if cancel_ce:
+                cancel_ce()
+                _LOGGER.debug("[Hidroelectrica] Cache expiry timer oprit")
 
             # Elimină LicenseManager
             hass.data[DOMAIN].pop(LICENSE_DATA_KEY, None)

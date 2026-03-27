@@ -1,5 +1,7 @@
 """Constante pentru integrarea Hidroelectrica România."""
 
+from typing import Final
+
 from homeassistant.const import Platform
 
 DOMAIN = "hidroelectrica"
@@ -107,3 +109,5 @@ CONF_ACCOUNT_METADATA = "account_metadata"
 # ──────────────────────────────────────────────
 CONF_LICENSE_KEY = "license_key"
 LICENSE_DATA_KEY = "hidroelectrica_license_manager"
+
+LICENSE_PURCHASE_URL: Final = "https://hubinteligent.org/licenta/hidroelectrica"
