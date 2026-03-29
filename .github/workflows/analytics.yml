@@ -1,4 +1,4 @@
-name: Repository Analytics
+name: Analiza repository-ului
 
 on:
   schedule:
