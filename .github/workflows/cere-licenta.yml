@@ -1,16 +1,13 @@
 name: Procesare cerere de licență
-
 on:
   issues:
     types: [opened]
-
 jobs:
   procesare-licenta:
     if: contains(github.event.issue.labels.*.name, 'licență')
     runs-on: ubuntu-latest
     permissions:
       issues: write
-
     steps:
       - name: Redactare email și publicare răspuns
         uses: actions/github-script@v7
@@ -103,54 +100,132 @@ jobs:
               }
             }
 
-            // ── Comentariu automat ──
-            const comment = [
-              `## Susținerea proiectului & licențiere`,
-              ``,
-              `Mulțumim pentru interes, @${issueAuthor}!`,
-              ``,
-              `Integrările Home Assistant sunt dezvoltate și întreținute constant — actualizări, compatibilitate, infrastructură, suport și documentație. Toate acestea implică un efort continuu.`,
-              ``,
-              `Proiectul rămâne accesibil, dar **continuarea sa depinde de implicarea comunității**. Nu este vorba de o vânzare sau de o taxă, ci de un model simplu: dacă integrarea îți este utilă și vrei să continue să existe, o poți susține printr-o contribuție simbolică.`,
-              ``,
-              `---`,
-              ``,
-              `### Cum funcționează`,
-              ``,
-              `**Perioadă de test** — fiecare integrare poate fi utilizată gratuit timp de **30 de zile**, fără nicio limitare.`,
-              ``,
-              `**Susținere** — după perioada de test, poți contribui prin [Buy Me a Coffee](https://buymeacoffee.com/cnecrea). Contribuția este echivalentul unei cafele — nu un abonament, nu o plată per integrare.`,
-              ``,
-              `**Ce primești:**`,
-              `- licențe **perpetue** pentru următoarele integrări:`,
-              `[E-Bloc România](https://github.com/cnecrea/e-bloc.ro), [E-ON România](https://github.com/cnecrea/eonromania), [eRovinieta](https://github.com/cnecrea/erovinieta), [Hidroelectrica](https://github.com/cnecrea/hidroelectrica), [MyElectrica](https://github.com/cnecrea/myelectrica), [Pago Plătește](https://github.com/cnecrea/pagoplateste), [Vehicule](https://github.com/cnecrea/vehicule).`,
-              `- suport în utilizare`,
-              `- acces la toate actualizările viitoare`,
-              ``,
-              `---`,
-              ``,
-              `### Pașii pentru obținerea licenței`,
-              ``,
-              `1. Accesează [Buy Me a Coffee](https://buymeacoffee.com/cnecrea) și efectuează contribuția`,
-              `2. **Introdu corect adresa de email** la contribuție — pe aceasta vei primi licențele`,
-              `3. Licențele vor fi emise și trimise automat pe email`,
-              ``,
-              `---`,
-              ``,
-              `### Informații utile`,
-              ``,
-              `- în cazul reinstalării Home Assistant, licențele pot fi reemise.`,
-              `- la restore din backup, licențele rămân active`,
-              `- utilizatorii care au susținut proiectele anterioare primesc licențele automat pe email, fără solicitare suplimentară`,
-              `- susținerea nu este per integrare — este pentru proiectul în ansamblu`,
-              ``,
-              `---`,
-              ``,
-              `> Acest sistem există pentru sustenabilitate, nu pentru monetizare. O integrare stabilă, testată și actualizată constant necesită resurse. Implicarea ta face posibilă continuarea proiectului.`,
-              ``,
-              `---`,
-              `*Adresa de email a fost preluată și redactată automat din acest issue pentru confidențialitate.*`
+            // ── Verificare promoție activă ──
+            let promoActiv = false;
+            const apiUrl = process.env.LICENSE_API_URL;
+            const adminKey = process.env.LICENSE_ADMIN_KEY;
+            if (apiUrl && adminKey) {
+              try {
+                const promoResp = await fetch(`${apiUrl}/license/v2/admin/bmac/promo-status`, {
+                  headers: { 'X-Admin-Key': adminKey },
+                });
+                if (promoResp.ok) {
+                  const promoData = await promoResp.json();
+                  promoActiv = promoData.promo_activ === true;
+                  console.log(`Promoție activă: ${promoActiv}`);
+                }
+              } catch (e) {
+                console.log(`Nu s-a putut verifica promoția: ${e.message}`);
+              }
+            }
+
+            // ── Comentariu automat — în funcție de promoție ──
+            const integrari = [
+              `- [E-Bloc România](https://github.com/cnecrea/e-bloc.ro)`,
+              `- [E-ON România](https://github.com/cnecrea/eonromania)`,
+              `- [eRovinieta](https://github.com/cnecrea/erovinieta)`,
+              `- [Hidroelectrica](https://github.com/cnecrea/hidroelectrica)`,
+              `- [MyElectrica](https://github.com/cnecrea/myelectrica)`,
+              `- [Pago Plătește](https://github.com/cnecrea/pagoplateste)`,
+              `- [Vehicule](https://github.com/cnecrea/vehicule)`,
             ].join('\n');
+
+            let comment;
+
+            if (promoActiv) {
+              comment = [
+                `Mulțumim pentru interes, @${issueAuthor}!`,
+                ``,
+                `Integrările Home Assistant sunt dezvoltate și întreținute constant — actualizări, compatibilitate cu noile versiuni, infrastructură, suport și documentație. Toate acestea necesită timp și efort continuu.`,
+                ``,
+                `Proiectul rămâne accesibil pentru toată lumea, însă dezvoltarea lui depinde de susținerea comunității.`,
+                ``,
+                `> 🎁 **Promoție activă!** Contribuie acum și primești automat licențe perpetue pentru **toate** integrările disponibile.`,
+                ``,
+                `---`,
+                ``,
+                `### Cum funcționează`,
+                ``,
+                `**Perioadă de test**`,
+                `Fiecare integrare poate fi folosită gratuit timp de **30 de zile**, fără nicio limitare.`,
+                ``,
+                `**Susținerea proiectului**`,
+                `Dacă integrarea îți este utilă și vrei să continue să fie dezvoltată, poți susține proiectul printr-o contribuție pe [Buy Me a Coffee](https://buymeacoffee.com/cnecrea).`,
+                ``,
+                `### Ce primești (promoție)`,
+                ``,
+                `O singură cafea = licențe **perpetue** (pe viață) pentru **toate** integrările:`,
+                ``,
+                integrari,
+                ``,
+                `---`,
+                ``,
+                `### Pași`,
+                ``,
+                `1. Accesează [Buy Me a Coffee](https://buymeacoffee.com/cnecrea) și oferă o cafea`,
+                `2. **Introdu corect adresa de email** — pe aceasta vei primi licențele`,
+                `3. Licențele se emit și se trimit automat pe email`,
+                ``,
+                `---`,
+                ``,
+                `### Informații utile`,
+                ``,
+                `- în cazul reinstalării Home Assistant, licențele pot fi reemise`,
+                `- la restore din backup, licențele rămân active`,
+                `- utilizatorii care au susținut anterior primesc licențele automat, fără solicitare suplimentară`,
+                ``,
+                `---`,
+                `*Adresa de email a fost preluată și redactată automat din acest issue pentru confidențialitate.*`,
+              ].join('\n');
+            } else {
+              comment = [
+                `Mulțumim pentru interes, @${issueAuthor}!`,
+                ``,
+                `Integrările Home Assistant sunt dezvoltate și întreținute constant — actualizări, compatibilitate cu noile versiuni, infrastructură, suport și documentație. Toate acestea necesită timp și efort continuu.`,
+                ``,
+                `Proiectul rămâne accesibil pentru toată lumea, însă dezvoltarea lui depinde de susținerea comunității.`,
+                ``,
+                `---`,
+                ``,
+                `### Cum funcționează`,
+                ``,
+                `**Perioadă de test**`,
+                `Fiecare integrare poate fi folosită gratuit timp de **30 de zile**, fără nicio limitare.`,
+                ``,
+                `**Susținerea proiectului**`,
+                `Dacă integrarea îți este utilă și vrei să continue să fie dezvoltată, poți susține proiectul printr-o contribuție pe [Buy Me a Coffee](https://buymeacoffee.com/cnecrea).`,
+                `Pentru fiecare cafea oferită primești **1 punct**.`,
+                ``,
+                `### Ce poți face cu punctele`,
+                ``,
+                `**1 punct = 1 licență perpetuă** (pe viață) pentru **oricare** dintre integrările de mai jos:`,
+                ``,
+                integrari,
+                ``,
+                `Vrei mai multe licențe? Oferi mai multe cafele — fiecare punct îți permite activarea unei licențe la alegere.`,
+                ``,
+                `---`,
+                ``,
+                `### Pași`,
+                ``,
+                `1. Accesează [Buy Me a Coffee](https://buymeacoffee.com/cnecrea) și oferă o cafea (sau mai multe)`,
+                `2. **Introdu corect adresa de email** — pe aceasta vei primi link-ul de activare`,
+                `3. Vei primi un email cu un **link personalizat** unde îți alegi integrările dorite`,
+                `4. Licențele se generează instant pentru integrările alese`,
+                ``,
+                `---`,
+                ``,
+                `### Informații utile`,
+                ``,
+                `- în cazul reinstalării Home Assistant, licențele pot fi reemise`,
+                `- la restore din backup, licențele rămân active`,
+                `- punctele neutilizate rămân disponibile — poți reveni oricând să alegi integrări suplimentare`,
+                `- utilizatorii care au susținut anterior primesc licențele automat, fără solicitare suplimentară`,
+                ``,
+                `---`,
+                `*Adresa de email a fost preluată și redactată automat din acest issue pentru confidențialitate.*`,
+              ].join('\n');
+            }
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
