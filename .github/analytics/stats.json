@@ -1,7 +1,7 @@
 {
   "repo": "",
   "prima_colectare": "",
-  "ultima_actualizare": "2026-03-30T07:20:03Z",
+  "ultima_actualizare": "2026-03-31T00:08:08Z",
   "zilnic": {
     "2026-03-01": {
       "clones_total": 2,
@@ -646,7 +646,11 @@
           "vizite": 1,
           "vizitatori_unici": 1
         }
-      ]
+      ],
+      "clones_total": 27,
+      "clones_unice": 16,
+      "views_total": 21,
+      "views_unice": 12
     },
     "2026-03-30": {
       "stars": 84,
@@ -676,6 +680,49 @@
         },
         {
           "sursa": "DuckDuckGo",
+          "vizite": 1,
+          "vizitatori_unici": 1
+        }
+      ]
+    },
+    "2026-03-31": {
+      "stars": 86,
+      "forks": 8,
+      "watchers": 2,
+      "open_issues": 0,
+      "referrers": [
+        {
+          "sursa": "Google",
+          "vizite": 77,
+          "vizitatori_unici": 27
+        },
+        {
+          "sursa": "github.com",
+          "vizite": 70,
+          "vizitatori_unici": 36
+        },
+        {
+          "sursa": "hubinteligent.org",
+          "vizite": 2,
+          "vizitatori_unici": 2
+        },
+        {
+          "sursa": "Bing",
+          "vizite": 2,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "lm.facebook.com",
+          "vizite": 2,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "DuckDuckGo",
+          "vizite": 1,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "tehnologiesmart.ro",
           "vizite": 1,
           "vizitatori_unici": 1
         }
