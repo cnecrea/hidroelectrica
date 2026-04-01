@@ -121,11 +121,12 @@ jobs:
 
             // ── Comentariu automat — în funcție de promoție ──
             const integrari = [
-              `- [E-Bloc România](https://github.com/cnecrea/e-bloc.ro)`,
-              `- [E-ON România](https://github.com/cnecrea/eonromania)`,
+              `- [E-bloc România](https://github.com/cnecrea/e-bloc.ro)`,
+              `- [E.ON România](https://github.com/cnecrea/eonromania)`,
               `- [eRovinieta](https://github.com/cnecrea/erovinieta)`,
               `- [Hidroelectrica](https://github.com/cnecrea/hidroelectrica)`,
               `- [MyElectrica](https://github.com/cnecrea/myelectrica)`,
+              `- [MyENGIE](https://github.com/cnecrea/myengie)`,
               `- [Nova Power & Gas](https://github.com/cnecrea/vreaulanova)`,
               `- [Pago Plătește](https://github.com/cnecrea/pagoplateste)`,
               `- [Vehicule](https://github.com/cnecrea/vehicule)`,
