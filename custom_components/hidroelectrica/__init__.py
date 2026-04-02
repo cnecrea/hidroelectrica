@@ -66,8 +66,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if LICENSE_DATA_KEY not in hass.data.get(DOMAIN, {}):
         _LOGGER.debug("[Hidroelectrica] Inițializez LicenseManager (prima entry)")
         license_mgr = LicenseManager(hass)
-        await license_mgr.async_load()
+        # IMPORTANT: setăm referința ÎNAINTE de async_load() pentru a preveni
+        # race condition-ul: async_load() face await HTTP, ceea ce cedează
+        # event loop-ul. Fără această ordine, alte entry-uri concurente ar vedea
+        # LICENSE_DATA_KEY ca lipsă și ar crea câte un LicenseManager duplicat,
+        # generând N request-uri /check simultane (câte unul per entry).
         hass.data[DOMAIN][LICENSE_DATA_KEY] = license_mgr
+        await license_mgr.async_load()
         _LOGGER.debug(
             "[Hidroelectrica] LicenseManager: status=%s, valid=%s, fingerprint=%s...",
             license_mgr.status,
@@ -86,16 +91,63 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
         async def _heartbeat_periodic(_now: Any) -> None:
-            """Verifică statusul la server dacă cache-ul a expirat."""
+            """Verifică statusul la server dacă cache-ul a expirat.
+
+            Logică:
+            1. Captează is_valid ÎNAINTE de heartbeat
+            2. Dacă cache expirat → contactează serverul
+            3. Captează is_valid DUPĂ heartbeat
+            4. Dacă starea s-a schimbat → reload entries (tranziție curată)
+            5. Reprogramează heartbeat-ul la intervalul actualizat de server
+            """
             mgr: LicenseManager | None = hass.data.get(DOMAIN, {}).get(
                 LICENSE_DATA_KEY
             )
             if not mgr:
                 _LOGGER.debug("[Hidroelectrica] Heartbeat: LicenseManager nu există, skip")
                 return
+
+            # Captează starea ÎNAINTE de heartbeat
+            was_valid = mgr.is_valid
+
             if mgr.needs_heartbeat:
                 _LOGGER.debug("[Hidroelectrica] Heartbeat: cache expirat, verific la server")
                 await mgr.async_heartbeat()
+
+                # Captează starea DUPĂ heartbeat
+                now_valid = mgr.is_valid
+
+                # Detectează tranziții pe care async_check_status nu le-a prins
+                # (ex: server inaccesibil + cache expirat → is_valid devine False)
+                if was_valid and not now_valid:
+                    _LOGGER.warning(
+                        "[Hidroelectrica] Licența a devenit invalidă — reîncarc senzorii"
+                    )
+                    await mgr._async_reload_entries()
+                elif not was_valid and now_valid:
+                    _LOGGER.info(
+                        "[Hidroelectrica] Licența a redevenit validă — reîncarc senzorii"
+                    )
+                    await mgr._async_reload_entries()
+
+                # Reprogramează heartbeat-ul la intervalul actualizat de server
+                new_interval = mgr.check_interval_seconds
+                _LOGGER.debug(
+                    "[Hidroelectrica] Heartbeat: reprogramez la %d secunde (%d min)",
+                    new_interval,
+                    new_interval // 60,
+                )
+                # Oprește vechiul timer
+                cancel_old = hass.data.get(DOMAIN, {}).get("_cancel_heartbeat")
+                if cancel_old:
+                    cancel_old()
+                # Programează noul timer cu intervalul actualizat
+                cancel_new = async_track_time_interval(
+                    hass,
+                    _heartbeat_periodic,
+                    timedelta(seconds=new_interval),
+                )
+                hass.data[DOMAIN]["_cancel_heartbeat"] = cancel_new
             else:
                 _LOGGER.debug("[Hidroelectrica] Heartbeat: cache valid, nu e nevoie de verificare")
 
