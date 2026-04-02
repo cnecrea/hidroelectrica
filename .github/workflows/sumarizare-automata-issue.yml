@@ -6,7 +6,7 @@ on:
 
 jobs:
   sumar:
-    if: "!contains(github.event.issue.labels.*.name, 'licență') && !contains(github.event.issue.labels.*.name, 'problemă licență')"
+    if: always() && !contains(github.event.issue.labels.*.name, 'licență')
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -48,3 +48,46 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NUMAR_ISSUE: ${{ github.event.issue.number }}
           RASPUNS: ${{ steps.inferenta.outputs.response }}
+
+  vacanta:
+      needs: sumar
+      if: always() && !contains(github.event.issue.labels.*.name, 'licență')
+      runs-on: ubuntu-latest
+      permissions:
+        issues: write
+  
+      steps:
+        - name: Verificare status proprietar repository
+          id: status
+          run: |
+            RESPONSE=$(gh api graphql -f query='
+              query {
+                user(login: "${{ github.repository_owner }}") {
+                  status {
+                    indicatesLimitedAvailability
+                  }
+                }
+              }
+            ')
+            BUSY=$(echo "$RESPONSE" | jq -r '.data.user.status.indicatesLimitedAvailability // false')
+            echo "busy=$BUSY" >> "$GITHUB_OUTPUT"
+          env:
+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  
+        - name: Răspuns automat vacanță
+          if: steps.status.outputs.busy == 'true'
+          run: |
+            gh issue comment "${{ github.event.issue.number }}" \
+              --repo "${{ github.repository }}" \
+              --body "$(cat <<'EOF'
+            Mulțumesc pentru raportarea acestui issue.
+  
+            În această perioadă sunt în vacanță și am acces limitat la internet, așa că este posibil să răspund cu întârziere. Voi reveni cu un răspuns când îmi este posibil.
+  
+            Între timp, te rog să verifici dacă problema nu a fost deja discutată în [issue-urile existente](../issues).
+  
+            Revin curând.
+            EOF
+            )"
+          env:
+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
