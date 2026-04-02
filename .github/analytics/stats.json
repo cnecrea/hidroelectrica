@@ -1,7 +1,7 @@
 {
   "repo": "",
   "prima_colectare": "",
-  "ultima_actualizare": "2026-04-02T07:05:37Z",
+  "ultima_actualizare": "2026-04-02T09:48:12Z",
   "zilnic": {
     "2026-03-01": {
       "clones_total": 2,
@@ -784,7 +784,7 @@
       "views_unice": 84
     },
     "2026-04-02": {
-      "stars": 91,
+      "stars": 92,
       "forks": 8,
       "watchers": 2,
       "open_issues": 0,
@@ -828,6 +828,7 @@
     }
   },
   "releases": {
+    "3.6.0": 0,
     "3.5.0": 5,
     "3.4.0": 0,
     "3.3.0": 1,
