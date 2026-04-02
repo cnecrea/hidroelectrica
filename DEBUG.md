@@ -59,9 +59,19 @@ Prosumator detectat (UAN=XXXXX): creat IndexEnergieProdusSensor.
 Am primit 401 la [endpoint]. Se reîncearcă cu token nou.
 ```
 
+**Licență — heartbeat:**
+```
+[LICENSE] Heartbeat OK. Licența este validă (expiră: 2027-01-15).
+```
+
 **Erori API:**
 ```
 HTTP XXX la [endpoint]: [mesaj eroare]
+```
+
+**Licență invalidă:**
+```
+[LICENSE] Licența nu este validă. Motiv: expired / invalid_key / server_unreachable.
 ```
 
 ---

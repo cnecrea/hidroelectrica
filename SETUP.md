@@ -7,6 +7,7 @@
 - **Home Assistant** versiunea 2025.11 sau mai recentă.
 - **HACS** (Home Assistant Community Store) instalat. Dacă nu este instalat, urmează [ghidul oficial HACS](https://hacs.xyz/docs/use).
 - Un cont activ pe platforma Hidroelectrica România (aplicația iHidro sau contul online).
+- **Licență** validă — de la [hubinteligent.org/licenta/hidroelectrica](https://hubinteligent.org/licenta/hidroelectrica)
 
 ---
 
@@ -104,6 +105,21 @@ După autentificarea reușită, se afișează lista conturilor descoperite:
 Fiecare cont este identificat prin **UAN** (Utility Account Number) și afișat cu adresa de consum asociată.
 
 Apasă **Trimite** pentru a finaliza configurarea. Integrarea va crea un dispozitiv pentru fiecare cont selectat, cu toți senzorii asociați.
+
+### 2.4 Licență (Pasul 3 din configurare)
+
+Integrarea necesită o **licență validă** pentru a funcționa. Fără licență:
+- Se creează doar senzorul `sensor.hidroelectrica_{nlc}_licenta` cu valoarea „Licență necesară"
+- Toți senzorii normali și butonul sunt dezactivate
+
+Pentru a introduce licența:
+1. **Setări** → **Dispozitive și Servicii**
+2. Găsește **Hidroelectrica România** → click pe **Configurare**
+3. Selectează **Licență**
+4. Introdu cheia de licență
+5. Click **Salvează**
+
+Licențe disponibile la: [hubinteligent.org/licenta/hidroelectrica](https://hubinteligent.org/licenta/hidroelectrica)
 
 ---
 

@@ -12,6 +12,8 @@
 - [Ce înseamnă „Credit" la Sold factură?](#ce-înseamnă-credit-la-sold-factură)
 - [Datele nu se actualizează. Ce fac?](#datele-nu-se-actualizează-ce-fac)
 - [Pot monitoriza mai multe conturi?](#pot-monitoriza-mai-multe-conturi)
+- [Ce e licența și de ce am nevoie de ea?](#ce-e-licența-și-de-ce-am-nevoie-de-ea)
+- [Am introdus licența dar senzorii tot arată „Licență necesară". De ce?](#am-introdus-licența-dar-senzorii-tot-arată-licență-necesară-de-ce)
 
 ---
 
@@ -163,3 +165,38 @@ Dacă ai modificat recent o plată sau o citire, poate dura până la 4 ore pân
 Da. La configurare, poți selecta mai multe conturi (UAN-uri) asociate aceluiași utilizator. Fiecare cont va avea propriul set de senzori, cu identificare prin UAN în numele entității.
 
 Integrarea creează un dispozitiv separat pentru fiecare UAN, cu toți senzorii grupați sub acel dispozitiv.
+
+---
+
+## Ce e licența și de ce am nevoie de ea?
+
+[Înapoi sus](#top)
+
+**Răspuns:**
+
+Integrarea folosește un sistem de licențiere server-side cu semnături Ed25519 și HMAC-SHA256. Fără o licență validă, integrarea afișează doar senzorul „Licență necesară" și nu creează senzori sau butoane funcționale.
+
+Licența se achiziționează de la: [hubinteligent.org/licenta/hidroelectrica](https://hubinteligent.org/licenta/hidroelectrica)
+
+După achiziție, introdu cheia de licență din OptionsFlow:
+1. **Setări** → **Dispozitive și Servicii** → **Hidroelectrica România** → **Configurare**
+2. Selectează **Licență**
+3. Completează câmpul „Cheie licență"
+4. Salvează
+
+---
+
+## Am introdus licența dar senzorii tot arată „Licență necesară". De ce?
+
+[Înapoi sus](#top)
+
+**Răspuns:**
+
+Câteva cauze posibile:
+
+1. **Licența nu a fost validată** — verifică logurile pentru mesaje cu `LICENSE`
+2. **Serverul de licențe nu este accesibil** — dacă HA nu are acces la internet, validarea eșuează
+3. **Cheie greșită** — verifică că ai copiat cheia corect, fără spații suplimentare
+4. **Restartare necesară** — în rare cazuri, un restart al HA poate rezolva problema
+
+Activează debug logging ([DEBUG.md](DEBUG.md)) și caută mesaje legate de licență.

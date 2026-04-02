@@ -73,6 +73,10 @@ Acești senzori se creează **automat** când integrarea detectează registrul `
 - Permite trimiterea autocitrii când fereastra de citire este activă.
 - La prosumator, butonul nu se creează (distribuitorul citește contorul automat).
 
+### Licență
+
+**Sistem de licență** — fără licență validă se afișează doar senzorul „Licență necesară".
+
 ---
 
 ## Arhitectură tehnică
@@ -119,10 +123,21 @@ Detecția se face automat pe baza prezenței registrului `1.8.0_P` în `GetMeter
 3. Selectează conturile (UAN-urile) pe care vrei să le monitorizezi.
 4. Specifică intervalul de actualizare (implicit: 3600 secunde, minim: 300, maxim: 86400).
 
+### Configurare licență
+Integrarea necesită o licență validă. După configurarea contului, mergi la **Setări** → **Dispozitive și Servicii** → **Hidroelectrica România** → **Configurare** și introdu cheia de licență în secțiunea **Licență**.
+
 ### Opțiuni configurabile
 - Interval de actualizare (modificabil din opțiunile integrării fără a reconfigura).
+- Licență (modificabilă din opțiunile integrării fără a reconfigura).
 
 ---
+
+## Cerințe
+
+- **Home Assistant** versiunea 2025.11 sau mai recentă.
+- **HACS** instalat (opțional, dar recomandat).
+- Un cont activ pe platforma Hidroelectrica România (aplicația iHidro sau contul online).
+- **Licență** validă — [hubinteligent.org/licenta/hidroelectrica](https://hubinteligent.org/licenta/hidroelectrica)
 
 ## Instalare
 
@@ -198,6 +213,28 @@ entities:
     name: Plăți 2026
   - entity: sensor.hidroelectrica_XXXXXXXX_arhiva_plati_prosumator_2026
     name: Compensații ANRE 2026
+```
+
+---
+
+## Structura fișierelor
+
+```
+custom_components/hidroelectrica/
+├── __init__.py          # Setup/unload integrare (runtime_data, licență)
+├── api.py               # HidroelectricaApiClient — autentificare, GET
+├── button.py            # Butonul Trimite index (doar non-prosumator)
+├── config_flow.py       # ConfigFlow + OptionsFlow (autentificare, licență)
+├── const.py             # Constante, URL-uri API
+├── coordinator.py       # DataUpdateCoordinator — refresh în două faze
+├── helpers.py           # Funcții utilitare
+├── license.py           # Manager licență (server-side, Ed25519, HMAC-SHA256)
+├── manifest.json        # Metadata integrare
+├── sensor.py            # Senzori (date contract, sold, index, etc.)
+├── strings.json         # Traduceri implicite (engleză)
+└── translations/
+    ├── en.json          # Traduceri engleză
+    └── ro.json          # Traduceri române
 ```
 
 ---
