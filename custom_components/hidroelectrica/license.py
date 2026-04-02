@@ -109,6 +109,26 @@ class LicenseManager:
         self._cache_expiry_warned = False
         # Contor eșecuri consecutive la contactarea serverului (pentru backoff)
         self._consecutive_failures: int = 0
+        # Versiunea integrării — citită din manifest.json în async_load()
+        # NU aici: read_text() e I/O blocant → HA detectează blocking call
+        self._integration_version: str | None = None
+        # Versiunea Home Assistant
+        self._ha_version: str | None = None
+        try:
+            from homeassistant.const import __version__ as ha_ver
+            self._ha_version = ha_ver
+        except ImportError:
+            pass
+
+    @staticmethod
+    def _read_manifest_version() -> str | None:
+        """Citește versiunea integrării din manifest.json (o singură dată, la startup)."""
+        try:
+            manifest_path = Path(__file__).parent / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            return manifest.get("version")
+        except Exception:  # noqa: BLE001
+            return None
 
     @property
     def _session(self) -> aiohttp.ClientSession:
@@ -140,6 +160,9 @@ class LicenseManager:
         )
         self._hardware_fingerprint = await self._hass.async_add_executor_job(
             self._generate_hardware_fingerprint
+        )
+        self._integration_version = await self._hass.async_add_executor_job(
+            self._read_manifest_version
         )
         _LOGGER.debug(
             "[Hidroelectrica:License] Fingerprint generat: %s... (hw: %s...)",
@@ -303,6 +326,8 @@ class LicenseManager:
             "timestamp": timestamp,
             "integration": INTEGRATION,
             "hardware_fingerprint": self._hardware_fingerprint,
+            "integration_version": self._integration_version,
+            "ha_version": self._ha_version,
         }
         payload["hmac"] = self._compute_request_hmac(payload)
 
@@ -754,6 +779,8 @@ class LicenseManager:
             "fingerprint": self._fingerprint,
             "timestamp": timestamp,
             "integration": INTEGRATION,
+            "integration_version": self._integration_version,
+            "ha_version": self._ha_version,
         }
         payload["hmac"] = self._compute_request_hmac(payload)
 
@@ -1112,7 +1139,7 @@ class LicenseManager:
         """
         data = {
             k: v for k, v in payload.items()
-            if k not in ("hmac", "hardware_fingerprint")
+            if k not in ("hmac", "hardware_fingerprint", "integration_version", "ha_version")
         }
         msg = json.dumps(data, sort_keys=True).encode()
         # Folosește client_secret dacă e disponibil (v3.1)
