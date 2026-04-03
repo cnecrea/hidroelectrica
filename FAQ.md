@@ -176,7 +176,7 @@ Integrarea creează un dispozitiv separat pentru fiecare UAN, cu toți senzorii 
 
 Integrarea folosește un sistem de licențiere server-side cu semnături Ed25519 și HMAC-SHA256. Fără o licență validă, integrarea afișează doar senzorul „Licență necesară" și nu creează senzori sau butoane funcționale.
 
-Licența se achiziționează de la: [hubinteligent.org/licenta/hidroelectrica](https://hubinteligent.org/licenta/hidroelectrica)
+Licența se achiziționează de la: [hubinteligent.org/donate?ref=hidroelectrica](https://hubinteligent.org/donate?ref=hidroelectrica)
 
 După achiziție, introdu cheia de licență din OptionsFlow:
 1. **Setări** → **Dispozitive și Servicii** → **Hidroelectrica România** → **Configurare**
