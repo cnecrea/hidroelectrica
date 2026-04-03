@@ -102,6 +102,7 @@ jobs:
 
             // ── Verificare promoție activă ──
             let promoActiv = false;
+            let promoEndDate = null;
             const apiUrl = process.env.LICENSE_API_URL;
             const adminKey = process.env.LICENSE_ADMIN_KEY;
             if (apiUrl && adminKey) {
@@ -112,12 +113,25 @@ jobs:
                 if (promoResp.ok) {
                   const promoData = await promoResp.json();
                   promoActiv = promoData.promo_activ === true;
-                  console.log(`Promoție activă: ${promoActiv}`);
+                  promoEndDate = promoData.end_date || null;
+                  console.log(`Promoție activă: ${promoActiv}, end_date: ${promoEndDate}`);
                 }
               } catch (e) {
                 console.log(`Nu s-a putut verifica promoția: ${e.message}`);
               }
             }
+
+            // Formatare dată promoție pentru afișare (ex: "1 mai 2026")
+            function formatPromoDate(dateStr) {
+              if (!dateStr) return null;
+              const months = ['ianuarie','februarie','martie','aprilie','mai','iunie','iulie','august','septembrie','octombrie','noiembrie','decembrie'];
+              const [y, m, d] = dateStr.split('-').map(Number);
+              return `${d} ${months[m - 1]} ${y}`;
+            }
+            const promoDateText = formatPromoDate(promoEndDate);
+            // Fără end_date valid = nu afișăm promoția (safety check)
+            if (!promoDateText) promoActiv = false;
+            const promoLine = `> 🎁 **Promoție activă până pe ${promoDateText}!** Contribuie acum și primești automat **licențe perpetue pentru toate integrările** disponibile.`;
 
             // ── Comentariu automat — în funcție de promoție ──
             const integrari = [
@@ -142,7 +156,7 @@ jobs:
                 `Integrările Home Assistant sunt dezvoltate și întreținute constant: compatibilitate cu noile versiuni, actualizări, infrastructură, suport și documentație. Proiectul rămâne accesibil tuturor, însă dezvoltarea lui este susținută de comunitate.`,
                 ``,
                 ``,
-                `> 🎁 **Promoție activă până pe 1 mai 2026!** Contribuie acum și primești automat **licențe perpetue pentru toate integrările** disponibile.`,
+                promoLine,
                 ``,
                 `---`,
                 ``,
