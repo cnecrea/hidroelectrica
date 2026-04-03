@@ -15,6 +15,7 @@ jobs:
           LICENSE_API_URL: ${{ secrets.LICENSE_API_URL }}
           LICENSE_ADMIN_KEY: ${{ secrets.LICENSE_ADMIN_KEY }}
         with:
+          github-token: ${{ secrets.HUBINTELIGENT_PAT }}
           script: |
             const body = context.payload.issue.body || '';
             const issueNumber = context.issue.number;
