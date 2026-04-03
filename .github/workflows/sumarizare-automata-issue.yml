@@ -80,13 +80,16 @@ jobs:
             gh issue comment "${{ github.event.issue.number }}" \
               --repo "${{ github.repository }}" \
               --body "$(cat <<'EOF'
-            Mulțumesc pentru raportarea acestui issue.
-  
-            În această perioadă sunt în vacanță și am acces limitat la internet, așa că este posibil să răspund cu întârziere. Voi reveni cu un răspuns când îmi este posibil.
-  
-            Între timp, te rog să verifici dacă problema nu a fost deja discutată în [issue-urile existente](../issues).
-  
-            Revin curând.
+            ** ℹ️ Mesaj automat ℹ️ **
+            
+            Mulțumesc pentru deschiderea acestui issue.
+            
+            În această perioadă dezvoltatorul proiectului este în vacanță și are acces limitat la internet, astfel că răspunsurile pot întârzia.
+            
+            Te rog să verifici între timp dacă problema a fost deja raportată sau discutată în lista de issue-uri existente:
+            https://github.com/${{ github.repository }}/issues
+            
+            Issue-ul tău rămâne înregistrat și va fi analizat când activitatea revine la normal.
             EOF
             )"
           env:
