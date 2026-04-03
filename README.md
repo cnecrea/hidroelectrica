@@ -137,7 +137,7 @@ Integrarea necesită o licență validă. După configurarea contului, mergi la 
 - **Home Assistant** versiunea 2025.11 sau mai recentă.
 - **HACS** instalat (opțional, dar recomandat).
 - Un cont activ pe platforma Hidroelectrica România (aplicația iHidro sau contul online).
-- **Licență** validă — [hubinteligent.org/licenta/hidroelectrica](https://hubinteligent.org/licenta/hidroelectrica)
+- **Licență** validă — [hubinteligent.org/donate?ref=hidroelectrica](https://hubinteligent.org/donate?ref=hidroelectrica)
 
 ## Instalare
 
