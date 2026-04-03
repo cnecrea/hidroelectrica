@@ -7,7 +7,7 @@
 - **Home Assistant** versiunea 2025.11 sau mai recentă.
 - **HACS** (Home Assistant Community Store) instalat. Dacă nu este instalat, urmează [ghidul oficial HACS](https://hacs.xyz/docs/use).
 - Un cont activ pe platforma Hidroelectrica România (aplicația iHidro sau contul online).
-- **Licență** validă — de la [hubinteligent.org/licenta/hidroelectrica](https://hubinteligent.org/licenta/hidroelectrica)
+- **Licență** validă — de la [hubinteligent.org/donate?ref=hidroelectrica](https://hubinteligent.org/donate?ref=hidroelectrica)
 
 ---
 
@@ -119,7 +119,7 @@ Pentru a introduce licența:
 4. Introdu cheia de licență
 5. Click **Salvează**
 
-Licențe disponibile la: [hubinteligent.org/licenta/hidroelectrica](https://hubinteligent.org/licenta/hidroelectrica)
+Licențe disponibile la: [hubinteligent.org/donate?ref=hidroelectrica](https://hubinteligent.org/donate?ref=hidroelectrica)
 
 ---
 
