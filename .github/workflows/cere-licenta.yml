@@ -128,6 +128,7 @@ jobs:
               `- [MyElectrica](https://github.com/cnecrea/myelectrica)`,
               `- [MyENGIE](https://github.com/cnecrea/myengie)`,
               `- [Nova Power & Gas](https://github.com/cnecrea/vreaulanova)`,
+              `- [OPCOM România](https://github.com/cnecrea/opcom)`,
               `- [Pago Plătește](https://github.com/cnecrea/pagoplateste)`,
               `- [Vehicule](https://github.com/cnecrea/vehicule)`,
             ].join('\n');
