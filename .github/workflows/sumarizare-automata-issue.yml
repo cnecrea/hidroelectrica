@@ -6,7 +6,7 @@ on:
 
 jobs:
   sumar:
-    if: always() && !contains(github.event.issue.labels.*.name, 'licență')
+    if: always() && !contains(github.event.issue.labels.*.name, 'licență') && !contains(github.event.issue.labels.*.name, 'problemă licență')
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -45,13 +45,13 @@ jobs:
         run: |
           gh issue comment "$NUMAR_ISSUE" --body "$RASPUNS"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HUBINTELIGENT_PAT }}
           NUMAR_ISSUE: ${{ github.event.issue.number }}
           RASPUNS: ${{ steps.inferenta.outputs.response }}
 
   vacanta:
       needs: sumar
-      if: always() && !contains(github.event.issue.labels.*.name, 'licență')
+      if: always() && !contains(github.event.issue.labels.*.name, 'licență') && !contains(github.event.issue.labels.*.name, 'problemă licență')
       runs-on: ubuntu-latest
       permissions:
         issues: write
@@ -72,7 +72,7 @@ jobs:
             BUSY=$(echo "$RESPONSE" | jq -r '.data.user.status.indicatesLimitedAvailability // false')
             echo "busy=$BUSY" >> "$GITHUB_OUTPUT"
           env:
-            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            GH_TOKEN: ${{ secrets.HUBINTELIGENT_PAT }}
   
         - name: Răspuns automat vacanță
           if: steps.status.outputs.busy == 'true'
@@ -93,4 +93,4 @@ jobs:
             EOF
             )"
           env:
-            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            GH_TOKEN: ${{ secrets.HUBINTELIGENT_PAT }}
