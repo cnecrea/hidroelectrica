@@ -1,0 +1,39 @@
+name: Închide issue manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Ce issue dorești să închizi?"
+        required: true
+        type: string
+
+jobs:
+  inchide:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comentariu + închidere + lock
+        env:
+          GH_TOKEN: ${{ secrets.HUBINTELIGENT_PAT }}
+        run: |
+          gh issue comment "${{ inputs.issue_number }}" \
+            --repo "${{ github.repository }}" \
+            --body "$(cat <<'EOF'
+          Problema a fost rezolvată. Acest issue se închide.
+
+          ---
+          Proiect independent, construit și menținut de un singur dezvoltator.
+          Testare gratuită 30 de zile · licențe permanente oferite printr-o donație unică.  
+          Actualizările, mentenanța și infrastructura continuă și după prima licență — sustenabilitatea proiectului depinde de comunitatea care îl folosește.
+          
+          [![Buy Me A Coffee](https://raw.githubusercontent.com/cnecrea/cnecrea/main/brand/bmc-button-small.svg)](https://www.buymeacoffee.com/cnecrea)
+          EOF
+          )"
+
+          gh issue close "${{ inputs.issue_number }}" \
+            --repo "${{ github.repository }}" \
+            --reason completed
+
+          gh issue lock "${{ inputs.issue_number }}" \
+            --repo "${{ github.repository }}" \
+            --reason resolved
