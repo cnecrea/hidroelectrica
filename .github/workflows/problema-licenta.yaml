@@ -1,121 +1,24 @@
 name: Procesare problemă licență
-
 on:
   issues:
     types: [opened]
-
 jobs:
-  procesare-problema:
+  dispatch:
     if: contains(github.event.issue.labels.*.name, 'problemă licență')
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
-
     steps:
-      - name: Redactare email și licență
-        uses: actions/github-script@v7
+      - name: Trimite la procesare
+        uses: peter-evans/repository-dispatch@v3
         with:
-          github-token: ${{ secrets.HUBINTELIGENT_PAT }}
-          script: |
-            const body = context.payload.issue.body || '';
-            const issueNumber = context.issue.number;
-            const issueTitle = context.payload.issue.title;
-            const issueAuthor = context.payload.issue.user.login;
-
-            // ── Extragere email din formularul structurat ──
-            const emailMatch = body.match(/### Adresa de email\s*\n\s*\n\s*([^\n]+)/);
-            const email = emailMatch ? emailMatch[1].trim() : '';
-
-            // ── Extragere cheie de licență din formularul structurat ──
-            const licenseMatch = body.match(/### Cheia de licen[țţ][aă]\s*\n\s*\n\s*([^\n]+)/);
-            const licenseKey = licenseMatch ? licenseMatch[1].trim() : '';
-
-            // ── Extragere integrare ──
-            const integrareMatch = body.match(/### Integrarea vizat[aă]\s*\n\s*\n\s*([^\n]+)/);
-            const integrare = integrareMatch ? integrareMatch[1].trim() : 'nespecificată';
-
-            // ── Extragere tip cerere ──
-            const tipMatch = body.match(/### Tipul cererii\s*\n\s*\n\s*([^\n]+)/);
-            const tipCerere = tipMatch ? tipMatch[1].trim() : 'nespecificat';
-
-            // ── Redactare email și licență din body-ul issue-ului ──
-            let redacted = body;
-
-            if (email && email.includes('@')) {
-              redacted = redacted.replace(
-                email,
-                '`[adresă redactată — transmisă confidențial dezvoltatorului]`'
-              );
-              console.log('Email redactat din issue body');
-            } else {
-              console.log('Niciun email valid găsit în issue body');
+          token: ${{ secrets.HUBINTELIGENT_PAT }}
+          repository: cnecrea/automation
+          event-type: problema-licenta
+          client-payload: |
+            {
+              "repo_owner": "${{ github.repository_owner }}",
+              "repo_name": "${{ github.event.repository.name }}",
+              "issue_number": ${{ github.event.issue.number }},
+              "issue_title": ${{ toJSON(github.event.issue.title) }},
+              "issue_author": "${{ github.event.issue.user.login }}",
+              "issue_body": ${{ toJSON(github.event.issue.body) }}
             }
-
-            // Regex generic: PREFIX(3-5 litere)-XXXX-XXXX-XXXX-XXXX (case insensitive)
-            const licenseRegex = /[A-Z]{3,5}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}/gi;
-            if (licenseRegex.test(redacted)) {
-              redacted = redacted.replace(
-                new RegExp(licenseRegex.source, 'gi'),
-                '`[licență redactată — transmisă confidențial dezvoltatorului]`'
-              );
-              console.log('Cheie de licență redactată din issue body');
-            } else {
-              console.log('Nicio cheie de licență validă găsită în issue body');
-            }
-
-            // ── Actualizare body dacă s-a redactat ceva ──
-            if (redacted !== body) {
-              await github.rest.issues.update({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-                body: redacted
-              });
-              console.log('Issue body actualizat cu redactări');
-            }
-
-            // ── Salvare info confidențiale în artifact ──
-            const fs = require('fs');
-            fs.mkdirSync('artifact', { recursive: true });
-            fs.writeFileSync('artifact/email-info.txt', [
-              `Issue:      #${issueNumber}`,
-              `Titlu:      ${issueTitle}`,
-              `Autor:      @${issueAuthor}`,
-              `Integrare:  ${integrare}`,
-              `Tip cerere: ${tipCerere}`,
-              `Email:      ${email || 'N/A'}`,
-              `Licență:    ${licenseKey || 'N/A'}`,
-              `Data:       ${new Date().toISOString()}`
-            ].join('\n'));
-
-            // ── Mascarea datelor sensibile din logurile workflow-ului ──
-            if (email) core.setSecret(email);
-            if (licenseKey) core.setSecret(licenseKey);
-
-            // ── Comentariu automat ──
-            const comment = [
-              `Salut @${issueAuthor},`,
-              ``,
-              `Cererea a fost înregistrată și va fi analizată în cel mai scurt timp.`,
-              ``,
-              `Datele sensibile (adresa de email și cheia de licență) au fost redactate automat din acest issue pentru confidențialitate.`,
-              ``,
-              `---`,
-              `*Mesaj generat automat.*`
-            ].join('\n');
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issueNumber,
-              body: comment
-            });
-
-            console.log('Comentariu publicat cu succes');
-
-      - name: Upload date confidențiale
-        uses: actions/upload-artifact@v4
-        with:
-          name: problema-licenta-email-${{ github.event.issue.number }}
-          path: artifact/
-          retention-days: 90
