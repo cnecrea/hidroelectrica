@@ -1,7 +1,7 @@
 {
   "repo": "",
   "prima_colectare": "",
-  "ultima_actualizare": "2026-04-10T07:19:51Z",
+  "ultima_actualizare": "2026-04-11T06:55:08Z",
   "zilnic": {
     "2026-03-01": {
       "clones_total": 2,
@@ -1198,6 +1198,48 @@
         {
           "sursa": "Bing",
           "vizite": 1,
+          "vizitatori_unici": 1
+        }
+      ],
+      "clones_total": 13,
+      "clones_unice": 10,
+      "views_total": 6,
+      "views_unice": 3
+    },
+    "2026-04-11": {
+      "stars": 93,
+      "forks": 8,
+      "watchers": 1,
+      "open_issues": 0,
+      "referrers": [
+        {
+          "sursa": "github.com",
+          "vizite": 286,
+          "vizitatori_unici": 159
+        },
+        {
+          "sursa": "Google",
+          "vizite": 97,
+          "vizitatori_unici": 29
+        },
+        {
+          "sursa": "hubinteligent.org",
+          "vizite": 13,
+          "vizitatori_unici": 12
+        },
+        {
+          "sursa": "buymeacoffee.com",
+          "vizite": 3,
+          "vizitatori_unici": 1
+        },
+        {
+          "sursa": "tehnologiesmart.ro",
+          "vizite": 2,
+          "vizitatori_unici": 2
+        },
+        {
+          "sursa": "lm.facebook.com",
+          "vizite": 2,
           "vizitatori_unici": 1
         }
       ]
