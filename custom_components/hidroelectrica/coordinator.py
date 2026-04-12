@@ -20,6 +20,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .api import HidroelectricaApiClient, HidroelectricaApiError
+from .const import DOMAIN, LICENSE_DATA_KEY
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,6 +63,12 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self) -> dict:
         """Obține date de la API cu strategie light/heavy."""
+        # Verificare licență — nu fetchuim date dacă licența/trial nu e validă
+        license_mgr = self.hass.data.get(DOMAIN, {}).get(LICENSE_DATA_KEY)
+        if license_mgr and not license_mgr.is_valid:
+            _LOGGER.debug("[Hidroelectrica] Licență invalidă — se omit apelurile API")
+            return self.data or {}
+
         uan = self.uan
         acc = self.account_number
         is_heavy = self._is_heavy_refresh
