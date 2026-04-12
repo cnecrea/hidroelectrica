@@ -649,7 +649,7 @@ def _build_sensors_for_coordinator(
     else:
         current_year = datetime.now().year
         sensors.append(ArhivaConsumSensor(coordinator, config_entry, current_year))
-        _LOGGER.warning(
+        _LOGGER.debug(
             "ArhivaConsumSensor creat cu anul curent %s (lipsesc date inițiale, UAN=%s).",
             current_year, uan,
         )
@@ -679,7 +679,7 @@ def _build_sensors_for_coordinator(
         # Creăm oricum cu anul curent — se va popula la primul heavy refresh
         current_year = datetime.now().year
         sensors.append(ArhivaIndexSensor(coordinator, config_entry, current_year, register_filter=consum_filter))
-        _LOGGER.warning(
+        _LOGGER.debug(
             "ArhivaIndexSensor creat cu anul curent %s (lipsesc date inițiale, UAN=%s).",
             current_year, uan,
         )
@@ -703,7 +703,7 @@ def _build_sensors_for_coordinator(
         else:
             current_year = datetime.now().year
             sensors.append(ArhivaIndexProdusSensor(coordinator, config_entry, current_year))
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "ArhivaIndexProdusSensor creat cu anul curent %s (lipsesc date, UAN=%s).",
                 current_year, uan,
             )
@@ -724,7 +724,7 @@ def _build_sensors_for_coordinator(
     else:
         current_year = datetime.now().year
         sensors.append(ArhivaPlatiSensor(coordinator, config_entry, current_year))
-        _LOGGER.warning(
+        _LOGGER.debug(
             "ArhivaPlatiSensor creat cu anul curent %s (lipsesc date inițiale, UAN=%s).",
             current_year, uan,
         )

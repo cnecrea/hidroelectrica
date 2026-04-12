@@ -368,7 +368,7 @@ class HidroelectricaApiClient:
                 label, gen_before, self._token_generation,
             )
         else:
-            _LOGGER.warning("[%s] HTTP 401 — se reautentifică.", label)
+            _LOGGER.debug("[%s] HTTP 401 — se reautentifică.", label)
             self.invalidate_session()
             try:
                 await self.async_ensure_authenticated()
