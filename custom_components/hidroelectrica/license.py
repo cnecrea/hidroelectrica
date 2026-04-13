@@ -262,12 +262,22 @@ class LicenseManager:
         return hashlib.sha256(raw.encode()).hexdigest()
 
     def _generate_hardware_fingerprint(self) -> str:
-        """Generează un fingerprint hardware care supraviețuiește ștergerii .storage.
+        """Generează un fingerprint hardware unic per mașină fizică (v2).
 
-        Bazat DOAR pe machine-id + salt (FĂRĂ HA UUID).
-        Previne abuzul: ștergere .storage/core.uuid → UUID nou → fingerprint
-        nou → trial gratuit nelimitat. hardware_fingerprint rămâne constant.
+        Combină multiple surse hardware care supraviețuiesc ștergerii .storage:
+        - machine-id: identificator OS (poate fi partajat în HAOS/Docker)
+        - CPU serial: unic per Raspberry Pi (gravat în SoC)
+        - DMI UUID: unic per placă de bază x86
+        - MAC address: unic per interfață de rețea
+
+        Chiar dacă unele surse lipsesc, combinația reduce dramatic
+        probabilitatea de coliziune între mașini fizice diferite.
+
+        NU conține HA UUID → supraviețuiește ștergerii .storage/core.uuid.
         """
+        parts: list[str] = []
+
+        # 1. machine-id (poate fi partajat în HAOS, dar contribuie la hash)
         machine_id = ""
         try:
             mid_path = Path("/etc/machine-id")
@@ -275,8 +285,45 @@ class LicenseManager:
                 machine_id = mid_path.read_text().strip()
         except Exception:  # noqa: BLE001
             pass
+        parts.append(f"mid:{machine_id}")
 
-        raw = f"hwfp:{machine_id}|{_FP_SALT}"
+        # 2. CPU serial — unic per Raspberry Pi (gravat hardware)
+        cpu_serial = ""
+        try:
+            cpuinfo_path = Path("/proc/cpuinfo")
+            if cpuinfo_path.exists():
+                for line in cpuinfo_path.read_text().splitlines():
+                    if line.strip().lower().startswith("serial"):
+                        cpu_serial = line.split(":", 1)[1].strip()
+                        break
+        except Exception:  # noqa: BLE001
+            pass
+        parts.append(f"cpu:{cpu_serial}")
+
+        # 3. DMI product UUID — unic per placă de bază x86
+        dmi_uuid = ""
+        try:
+            dmi_path = Path("/sys/class/dmi/id/product_uuid")
+            if dmi_path.exists():
+                dmi_uuid = dmi_path.read_text().strip()
+        except Exception:  # noqa: BLE001
+            pass
+        parts.append(f"dmi:{dmi_uuid}")
+
+        # 4. MAC address — unic per interfață de rețea
+        mac_addr = ""
+        try:
+            import uuid as _uuid_mod
+            node = _uuid_mod.getnode()
+            # getnode() returnează random dacă nu găsește MAC real;
+            # verificăm bitul multicast (bit 0 al primului octet)
+            if not (node >> 40) & 1:  # bit multicast = 0 → MAC real
+                mac_addr = format(node, "012x")
+        except Exception:  # noqa: BLE001
+            pass
+        parts.append(f"mac:{mac_addr}")
+
+        raw = "|".join(parts) + f"|{_FP_SALT}"
         return hashlib.sha256(raw.encode()).hexdigest()
 
     @property
