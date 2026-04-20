@@ -46,3 +46,5 @@ body:
       label: Alte informații relevante
       description: Adăugați orice alte detalii pe care le considerați utile.
       placeholder: "Exemple, contexte sau alte detalii..."
+    validations:
+      required: true
