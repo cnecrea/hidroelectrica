@@ -256,3 +256,6 @@ Contribuțiile sunt binevenite! Trimite un pull request sau raportează probleme
 ## Suport
 
 Dacă îți place această integrare, oferă-i un ⭐ pe [GitHub](https://github.com/cnecrea/hidroelectrica/)!
+
+
+<!-- Fix #177 -->
