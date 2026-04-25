@@ -119,20 +119,8 @@ Prosumator detectat (UAN=XXXXX): butonul 'Trimite index' NU se creează
 
 ---
 
-## 4. Testare cu date de debug
 
-Dacă ai fișierele JSON de debug (generate prin scriptul de test), poți rula testul de simulare:
-
-```bash
-cd custom_components/hidroelectrica
-python3 test_both_accounts.py
-```
-
-Testul verifică: index consum, detecție prosumator, index producție, sold factură, separare registre consum/producție, separare plăți normale/compensații ANRE.
-
----
-
-## 5. Cum să postezi cod în discuții
+## 4. Cum să postezi cod în discuții
 
 Pentru a posta loguri sau cod în mod lizibil pe GitHub, folosește blocuri de cod:
 
