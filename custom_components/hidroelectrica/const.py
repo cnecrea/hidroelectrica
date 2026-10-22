@@ -96,6 +96,12 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON]
 ATTRIBUTION = "Date furnizate de Hidroelectrica România"
 
 # ──────────────────────────────────────────────
+# Evenimente (pentru automatizări)
+# ──────────────────────────────────────────────
+EVENT_AUTOCITIRE_SUCCESS = f"{DOMAIN}_autocitire_success"  # {uan, index}
+EVENT_AUTOCITIRE_ERROR = f"{DOMAIN}_autocitire_error"      # {uan, index, error}
+
+# ──────────────────────────────────────────────
 # Chei de configurare (din homeassistant.const)
 # ──────────────────────────────────────────────
 CONF_USERNAME = "username"

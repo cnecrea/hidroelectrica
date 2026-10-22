@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-import ssl
 import time
 from datetime import datetime
 from typing import Any
@@ -46,12 +45,6 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-# SSL bypass — serverul SEW Hidroelectrica are certificat problematic
-_SSL_CTX = ssl.create_default_context()
-_SSL_CTX.check_hostname = False
-_SSL_CTX.verify_mode = ssl.CERT_NONE
-
 
 class HidroelectricaApiError(Exception):
     """Eroare generică aruncată de API client."""
@@ -294,7 +287,6 @@ class HidroelectricaApiClient:
                 json=payload,
                 headers=headers,
                 timeout=self._timeout,
-                ssl=_SSL_CTX,
             ) as resp:
                 if resp.status == 200:
                     return await resp.json(content_type=None)
@@ -341,7 +333,6 @@ class HidroelectricaApiClient:
                 json=payload,
                 headers=self._build_auth_headers(),
                 timeout=self._timeout,
-                ssl=_SSL_CTX,
             ) as resp:
                 text = await resp.text()
 
@@ -382,7 +373,6 @@ class HidroelectricaApiClient:
                 json=payload,
                 headers=self._build_auth_headers(),
                 timeout=self._timeout,
-                ssl=_SSL_CTX,
             ) as resp:
                 text = await resp.text()
                 if resp.status == 200:

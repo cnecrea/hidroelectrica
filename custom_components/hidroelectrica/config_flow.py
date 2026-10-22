@@ -20,7 +20,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.config_entries import ConfigFlowResult
+from homeassistant.config_entries import ConfigEntryState, ConfigFlowResult
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import selector
@@ -58,6 +58,23 @@ _LOGGER = logging.getLogger(__name__)
 # ──────────────────────────────────────────────
 # Helpers comune
 # ──────────────────────────────────────────────
+
+_ETICHETE_TIP_LICENTA = {
+    # Tipurile emise de WebAPI (LICENSE_DURATION)
+    "perpetual": ("perpetuă", "perpetual"),
+    "annual": ("anuală", "annual"),
+    "semi_annual": ("semestrială", "semi-annual"),
+    "monthly": ("lunară", "monthly"),
+}
+
+
+def _eticheta_tip_licenta(tip: str | None, is_ro: bool) -> str:
+    """Eticheta afișată pentru tipul de licență primit de la server."""
+    if not tip:
+        return "necunoscut" if is_ro else "unknown"
+    ro, en = _ETICHETE_TIP_LICENTA.get(tip, (tip, tip))
+    return ro if is_ro else en
+
 
 async def _fetch_accounts_after_login(
     api: HidroelectricaApiClient,
@@ -115,7 +132,7 @@ class HidroelectricaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(self._username.lower())
             self._abort_if_unique_id_configured()
 
-            session = async_get_clientsession(self.hass, verify_ssl=False)
+            session = async_get_clientsession(self.hass)
             self._api = HidroelectricaApiClient(
                 session, self._username, self._password
             )
@@ -266,27 +283,35 @@ class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
                 CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
             )
 
-            session = async_get_clientsession(self.hass, verify_ssl=False)
-            self._api = HidroelectricaApiClient(session, username, password)
+            conflict = any(
+                e.entry_id != self.config_entry.entry_id
+                and e.unique_id == username.lower()
+                for e in self.hass.config_entries.async_entries(DOMAIN)
+            )
+            if conflict:
+                # Contul e deja configurat într-o altă intrare
+                errors["base"] = "already_configured"
+            else:
+                session = async_get_clientsession(self.hass)
+                self._api = HidroelectricaApiClient(session, username, password)
+                try:
+                    await self._api.async_login()
+                    _store_token(self.hass, username, self._api)
 
-            try:
-                await self._api.async_login()
-                _store_token(self.hass, username, self._api)
+                    accounts = await _fetch_accounts_after_login(self._api)
+                    if accounts:
+                        self._accounts_raw = accounts
+                        self._username = username
+                        self._password = password
+                        self._update_interval = update_interval
+                        return await self.async_step_select_accounts()
+                    errors["base"] = "no_data"
 
-                accounts = await _fetch_accounts_after_login(self._api)
-                if accounts:
-                    self._accounts_raw = accounts
-                    self._username = username
-                    self._password = password
-                    self._update_interval = update_interval
-                    return await self.async_step_select_accounts()
-                errors["base"] = "no_data"
-
-            except HidroelectricaAuthError:
-                errors["base"] = "auth_failed"
-            except Exception:
-                _LOGGER.exception("Eroare neașteptată la autentificare.")
-                errors["base"] = "unknown"
+                except HidroelectricaAuthError:
+                    errors["base"] = "auth_failed"
+                except Exception:
+                    _LOGGER.exception("Eroare neașteptată la autentificare.")
+                    errors["base"] = "unknown"
 
         current = self.config_entry.data
 
@@ -329,6 +354,8 @@ class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
                     select_all, selected, self._accounts_raw
                 )
 
+                # Listener-ul de update reîncarcă intrarea o singură dată, doar
+                # dacă s-a schimbat ceva (înainte: update + reload explicit = 2 reload-uri).
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
                     data={
@@ -341,13 +368,20 @@ class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
                             self._accounts_raw
                         ),
                     },
+                    title=f"Hidroelectrica ({self._username})",
+                    unique_id=self._username.lower(),
                 )
+                if self.config_entry.state in (
+                    ConfigEntryState.SETUP_RETRY,
+                    ConfigEntryState.SETUP_ERROR,
+                ):
+                    # Intrarea nu rulează (ex: parolă greșită) → listener-ul de
+                    # update nu e activ; reîncercăm imediat cu noile date.
+                    self.hass.config_entries.async_schedule_reload(
+                        self.config_entry.entry_id
+                    )
 
-                await self.hass.config_entries.async_reload(
-                    self.config_entry.entry_id
-                )
-
-                return self.async_create_entry(data={})
+                return self.async_create_entry(data=dict(self.config_entry.options))
 
         current = self.config_entry.data
 
@@ -404,7 +438,7 @@ class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
         if server_status == "licensed":
             from datetime import datetime
 
-            tip = mgr.license_type or "necunoscut"
+            tip = _eticheta_tip_licenta(mgr.license_type, True)
             status_lines = [f"✅ Licență activă ({tip})"]
 
             if mgr.license_key_masked:
@@ -423,7 +457,7 @@ class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
                     mgr.license_expires_at
                 ).strftime("%d.%m.%Y %H:%M")
                 status_lines.append(f"📅 Expiră la: {exp_date}")
-            elif tip == "perpetual":
+            elif mgr.license_type == "perpetual":
                 status_lines.append("Valabilitate: nelimitată (perpetuă)")
 
             description_placeholders["license_status"] = "\n".join(
@@ -509,7 +543,7 @@ class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
                     persistent_notification.async_create(
                         self.hass,
                         f"Licența Hidroelectrica a fost activată cu succes! "
-                        f"Tip: {mgr.license_type or 'necunoscut'}.",
+                        f"Tip: {_eticheta_tip_licenta(mgr.license_type, True)}.",
                         title="Licență activată",
                         notification_id="hidroelectrica_license_activated",
                     )
@@ -517,16 +551,17 @@ class HidroelectricaOptionsFlow(config_entries.OptionsFlow):
                         data=self.config_entry.options
                     )
 
-                # Mapare erori API
+                # Mapare erori API (codurile WebAPI /activate + erorile locale)
                 api_error = result.get("error", "unknown_error")
                 error_map = {
                     "invalid_key": "license_key_invalid",
                     "already_used": "license_already_used",
                     "expired_key": "license_key_expired",
                     "fingerprint_mismatch": "license_fingerprint_mismatch",
-                    "invalid_signature": "license_server_error",
                     "network_error": "license_network_error",
-                    "server_error": "license_server_error",
+                    "http_502": "license_network_error",
+                    "http_503": "license_network_error",  # server temporar ocupat
+                    "http_504": "license_network_error",
                 }
                 errors["base"] = error_map.get(api_error, "license_server_error")
 

@@ -1,20 +1,19 @@
 """
 Modul de licențiere pentru integrarea Hidroelectrica.
 
-Arhitectură server-side (v3 — multi-integrare, MySQL):
+Arhitectură server-side (protocol v3 — vezi STANDARD-LICENTA.md / WebAPI):
 - Fingerprint = SHA-256(HA UUID + machine-id + salt)
 - TOTUL e controlat de server: trial, expirare, intervale
-- Client trimite fingerprint + integration → server returnează token semnat
-- Token-ul serverului conține `valid_until` — cache local expiră automat
-- Câmpul `integration` identifică integrarea (fleet, hidroelectrica, etc.)
-- Fără constante locale modificabile (trial_days, grace_days etc.)
-- Activare: trimite {key, fingerprint, timestamp, integration, hmac} la API
-- API returnează token semnat Ed25519 (cheia privată e DOAR pe server)
-- Integrarea verifică semnătura cu cheia publică (embedded)
+- /check   → token de status semnat Ed25519 (valid_until = cât timp e valabil local)
+- /validate → heartbeat-ul licenței (actualizează last_heartbeat + versiunile pe server);
+             se trimite după fiecare /check reușit care confirmă statusul 'licensed'
+- /activate, /deactivate, /notify — semnate HMAC (client_secret, fallback fingerprint)
+- La 'invalid_hmac' (client_secret desincronizat) cererea se reia o dată semnată cu fingerprint
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac as hmac_lib
 import json
@@ -36,6 +35,7 @@ _LOGGER = logging.getLogger(__name__)
 # Configurare — doar URL-ul serverului
 # ─────────────────────────────────────────────
 LICENSE_API_URL = "https://api.hubinteligent.org/license/v1"
+USER_AGENT = "Hidroelectrica-HA-Integration/3.1"
 
 STORAGE_KEY = "hidroelectrica_license"
 STORAGE_VERSION = 1
@@ -44,30 +44,33 @@ STORAGE_VERSION = 1
 _FP_SALT = "hDr0_El3c$2026!zW"
 
 # Identificator integrare — trimis la server în fiecare request
-# Serverul folosește acest câmp pentru a separa licențele per integrare
 INTEGRATION = "hidroelectrica"
 
+# Timeout pentru verificarea care blochează pornirea (doar fără stare locală utilizabilă)
+_STARTUP_TIMEOUT_SEC = 10
+
+# Erori /validate care înseamnă că licența NU mai e activă pe acest dispozitiv
+_VALIDATE_DEFINITIVE_ERRORS = ("not_active", "fingerprint_mismatch", "invalid_key", "expired")
+
 # ─────────────────────────────────────────────
-# Cheile publice Ed25519 ale serverului (SEC-03: suport key rotation)
+# Cheia publică Ed25519 a serverului
 # ─────────────────────────────────────────────
-# Lista permite rotația cheilor: adaugă cheia nouă PRIMA în listă,
-# iar la update-ul următor elimină cheia veche.
-# Verificarea încearcă fiecare cheie în ordine — prima care validează câștigă.
-# Cheia privată corespunzătoare rămâne DOAR pe server.
+# Cheia privată corespunzătoare rămâne DOAR pe server. Cheia publică permite
+# doar VERIFICAREA semnăturilor. Lista suportă rotația cheilor (SEC-03).
 SERVER_PUBLIC_KEYS_PEM: list[str] = [
-    # Cheia activă (primară)
     """\
 -----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAUAZIZ1fw+b7qpq9LA47NRbHYhN8kONMxUiJyx5RHrBg=
 -----END PUBLIC KEY-----
 """,
-    # (adaugă aici chei vechi la rotație, șterge-le după ce TOȚI clienții s-au actualizat)
 ]
+
+# Backward compatibility alias (cod existent poate referi forma singulară)
 SERVER_PUBLIC_KEY_PEM = SERVER_PUBLIC_KEYS_PEM[0]
 
 
 # ─────────────────────────────────────────────
-# Manager de licențe (v2 — server-side)
+# Manager de licențe
 # ─────────────────────────────────────────────
 
 
@@ -78,21 +81,21 @@ class LicenseManager:
     - Trial: serverul decide durata, zilele rămase, expirarea
     - Licență: serverul semnează token-ul de activare
     - Cache: serverul controlează `valid_until` (cât timp e valid local)
-    - Heartbeat: intervalul e dictat de `valid_until`, nu de o constantă locală
 
     Ciclu de viață:
-    1. async_load() — se apelează o singură dată la setup
-    2. async_check_status() — verifică statusul la server (sau folosește cache)
-    3. is_valid — verifică dacă integrarea poate funcționa
-    4. async_activate(key) — activează o cheie de licență
-    5. async_heartbeat() — validare periodică (intervalul vine de la server)
+    1. async_load() — o singură dată la setup
+    2. async_check_status() — status de la server (sau din cache) + heartbeat /validate
+    3. is_valid — poate funcționa integrarea?
+    4. async_activate(key) / async_deactivate()
+    5. check_interval_seconds — când trebuie verificat din nou (folosit de __init__.py)
+
+    NU reîncarcă singur entry-urile la schimbarea statusului — de asta se ocupă
+    timer-ul din __init__.py (care actualizează și notificările).
     """
 
     # Perioadă de grație după expirarea cache-ului (server inaccesibil).
-    # Permite funcționarea continuă cu token-ul verificat local (Ed25519).
-    # Serverul RĂMÂNE sursa de adevăr — grația acoperă doar indisponibilitatea temporară.
-    _GRACE_LICENSED_SEC: int = 72 * 3600   # 72h pentru licențe active (cu token Ed25519)
-    _GRACE_TRIAL_SEC: int = 24 * 3600      # 24h pentru trial (fără token local)
+    _GRACE_LICENSED_SEC: int = 72 * 3600   # 72h pentru licențe active
+    _GRACE_TRIAL_SEC: int = 24 * 3600      # 24h pentru trial
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Inițializează managerul de licențe."""
@@ -102,17 +105,19 @@ class LicenseManager:
         self._fingerprint: str = ""
         self._hardware_fingerprint: str = ""
         self._loaded = False
-        self._hmac_retry_done = False
         # Token de status primit de la server (cache local)
         self._status_token: dict[str, Any] = {}
         # Flag anti-spam: logăm WARNING de cache expirat O SINGURĂ DATĂ
         self._cache_expiry_warned = False
-        # Contor eșecuri consecutive la contactarea serverului (pentru backoff)
+        # Eșecuri consecutive la contactarea serverului (pentru backoff)
         self._consecutive_failures: int = 0
-        # Versiunea integrării — citită din manifest.json în async_load()
-        # NU aici: read_text() e I/O blocant → HA detectează blocking call
+        # Serializează verificările: două timere / fluxuri simultane nu dublează request-urile
+        self._check_lock = asyncio.Lock()
+        # Previne bucla validate → re-check → validate
+        self._revalidating = False
+        # Versiunea integrării — citită din manifest.json în async_load() (I/O în executor)
         self._integration_version: str | None = None
-        # Versiunea Home Assistant
+        # Versiunea Home Assistant (import pur, fără I/O)
         self._ha_version: str | None = None
         try:
             from homeassistant.const import __version__ as ha_ver
@@ -132,14 +137,13 @@ class LicenseManager:
 
     @property
     def _session(self) -> aiohttp.ClientSession:
-        """Returnează sesiunea aiohttp partajată din Home Assistant."""
+        """Returnează sesiunea HTTP partajată din Home Assistant."""
         return async_get_clientsession(self._hass)
 
     # ─── Încărcare / Salvare ───
 
     async def async_load(self) -> None:
-        """Încarcă datele de licență din storage. Se apelează o singură dată."""
-        _LOGGER.debug("[Hidroelectrica:License] Încep async_load()")
+        """Încarcă datele de licență din storage și verifică statusul la server."""
         try:
             stored = await self._store.async_load()
             self._data = dict(stored) if stored else {}
@@ -149,11 +153,6 @@ class LicenseManager:
                 "— pornesc cu date goale (serverul va restaura starea)"
             )
             self._data = {}
-        _LOGGER.debug(
-            "[Hidroelectrica:License] Date din storage: %d chei (%s)",
-            len(self._data),
-            ", ".join(self._data.keys()) if self._data else "gol",
-        )
 
         self._fingerprint = await self._hass.async_add_executor_job(
             self._generate_fingerprint
@@ -165,47 +164,51 @@ class LicenseManager:
             self._read_manifest_version
         )
         _LOGGER.debug(
-            "[Hidroelectrica:License] Fingerprint generat: %s... (hw: %s...)",
+            "[Hidroelectrica:License] Fingerprint: %s... (hw: %s...)",
             self._fingerprint[:16],
             self._hardware_fingerprint[:16],
         )
 
-        # Restaurează status token din cache (dacă există)
-        self._status_token = self._data.get("status_token", {})
-        if self._status_token:
-            cached_status = self._status_token.get("status", "?")
-            cache_valid = self._is_status_cache_valid()
+        # Restaurează status token din cache — doar dacă aparține ACESTUI dispozitiv
+        # (un storage copiat de pe alt sistem nu trebuie să deblocheze integrarea).
+        cached = self._data.get("status_token")
+        if not isinstance(cached, dict):
+            cached = {}
+        if cached and self._token_matches(cached):
+            self._status_token = cached
             _LOGGER.debug(
-                "[Hidroelectrica:License] Cache restaurat: status=%s, cache_valid=%s",
-                cached_status,
-                cache_valid,
+                "[Hidroelectrica:License] Cache restaurat: status=%s, valid=%s",
+                cached.get("status"),
+                self._is_status_cache_valid(),
             )
-        else:
-            _LOGGER.debug("[Hidroelectrica:License] Niciun cache de status — prima rulare")
-
-        # Verifică statusul la server (prima verificare la startup)
-        _LOGGER.debug("[Hidroelectrica:License] Verific statusul la server (startup)...")
-        await self.async_check_status()
-
-        self._loaded = True
-        final_status = self.status
-        _LOGGER.debug(
-            "[Hidroelectrica:License] async_load() finalizat — status=%s, is_valid=%s",
-            final_status,
-            self.is_valid,
-        )
-
-        # Log-uri explicite pentru fiecare status — vizibile în /logs
-        if final_status == "licensed":
-            key = self._data.get("license_key", "?")
+        elif cached:
             _LOGGER.info(
-                "[Hidroelectrica:License] ✓ Licență ACTIVĂ (cheie: %s)", key
+                "[Hidroelectrica:License] Cache de status ignorat — aparține altui "
+                "dispozitiv/integrări (fingerprint diferit)"
+            )
+            self._data.pop("status_token", None)
+
+        if self._is_status_cache_valid() or self._is_within_grace_period():
+            # Pornirea Home Assistant NU așteaptă serverul de licențe când există o
+            # stare locală utilizabilă (cache valid sau perioadă de grație):
+            # verificarea se face în fundal, de timer-ul din __init__.py.
+            _LOGGER.debug("[Hidroelectrica:License] Stare locală utilizabilă — verificare în fundal")
+        else:
+            # Prima pornire / grație depășită: statusul e necesar acum, dar cu
+            # timeout scurt (un server căzut nu ține pornirea 30s).
+            await self.async_check_status(timeout=_STARTUP_TIMEOUT_SEC)
+        self._loaded = True
+
+        final_status = self.status
+        if final_status == "licensed":
+            _LOGGER.info(
+                "[Hidroelectrica:License] ✓ Licență ACTIVĂ (cheie: %s)",
+                self.license_key_masked or "?",
             )
         elif final_status == "trial":
-            days = self.trial_days_remaining
             _LOGGER.info(
-                "[Hidroelectrica:License] ⏳ Perioadă de evaluare (trial): "
-                "%d zile rămase", days
+                "[Hidroelectrica:License] ⏳ Perioadă de evaluare: %d zile rămase",
+                self.trial_days_remaining,
             )
         elif final_status == "expired":
             _LOGGER.warning(
@@ -220,7 +223,6 @@ class LicenseManager:
 
     async def _async_save(self) -> None:
         """Salvează datele de licență."""
-        _LOGGER.debug("[Hidroelectrica:License] Salvez datele în storage")
         await self._store.async_save(self._data)
 
     # ─── Fingerprint ───
@@ -328,374 +330,321 @@ class LicenseManager:
 
     @property
     def fingerprint(self) -> str:
-        """Returnează fingerprint-ul hardware."""
+        """Returnează fingerprint-ul principal."""
         return self._fingerprint
 
     @property
     def hardware_fingerprint(self) -> str:
-        """Returnează hardware fingerprint-ul (anti-abuse)."""
+        """Returnează fingerprint-ul hardware (anti-abuse)."""
         return self._hardware_fingerprint
+
+    def _token_matches(self, token: dict[str, Any]) -> bool:
+        """Token-ul (semnat de server) aparține acestui dispozitiv și acestei integrări?"""
+        return (
+            token.get("fingerprint") == self._fingerprint
+            and token.get("integration", INTEGRATION) == INTEGRATION
+        )
+
+    # ─── Comunicare cu serverul ───
+
+    async def _async_signed_post(
+        self, endpoint: str, payload: dict[str, Any], timeout: int = 30
+    ) -> tuple[int, dict[str, Any]]:
+        """POST semnat HMAC către /license/v1/<endpoint>. Returnează (HTTP status, JSON).
+
+        Dacă serverul răspunde 'invalid_hmac' și cererea a fost semnată cu
+        client_secret, secretul local e desincronizat (ex: trial recreat pe server):
+        îl ștergem și reluăm O DATĂ cererea semnată cu fingerprint — serverul
+        acceptă oricând fallback-ul pe fingerprint și trimite secretul nou la /check.
+        Excepțiile de rețea/timeout sunt propagate apelantului.
+        """
+        for attempt in (1, 2):
+            body = dict(payload)
+            body["hmac"] = self._compute_request_hmac(body)
+            async with self._session.post(
+                f"{LICENSE_API_URL}/{endpoint}",
+                json=body,
+                timeout=aiohttp.ClientTimeout(total=timeout),
+                headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
+            ) as resp:
+                status = resp.status
+                try:
+                    result = await resp.json(content_type=None)
+                except ValueError:  # răspuns non-JSON (ex: pagină HTML 502 de la proxy)
+                    result = {}
+            if not isinstance(result, dict):
+                result = {}
+            if (
+                attempt == 1
+                and result.get("error") == "invalid_hmac"
+                and self._data.get("client_secret")
+            ):
+                _LOGGER.warning(
+                    "[Hidroelectrica:License] /%s: HMAC invalid — client_secret desincronizat, "
+                    "reîncerc semnat cu fingerprint", endpoint,
+                )
+                self._data.pop("client_secret", None)
+                await self._async_save()
+                continue
+            return status, result
+        return status, result  # pragma: no cover — bucla returnează mereu
+
+    def _register_failure(self, message: str, *args: Any) -> None:
+        self._consecutive_failures += 1
+        _LOGGER.warning(
+            "[Hidroelectrica:License] " + message + " (eșec consecutiv #%d)",
+            *args, self._consecutive_failures,
+        )
 
     # ─── Verificare status la server ───
 
-    async def async_check_status(self) -> dict[str, Any]:
-        """Verifică statusul la server (/license/v1/check).
+    async def async_check_status(
+        self, force: bool = False, timeout: int = 30
+    ) -> dict[str, Any]:
+        """Statusul de la server (/check), sau din cache dacă e încă valid.
 
-        Serverul decide TOTUL: trial activ, zile rămase, interval de cache.
-        Returnează token-ul de status de la server.
-
-        Dacă există un token cached valid (valid_until > now), îl folosește.
-        Altfel, face request la server.
+        `force=True` ignoră cache-ul (după activare/dezactivare sau când
+        /validate arată că licența nu mai e activă).
+        Returnează token-ul de status curent.
         """
-        # Verifică cache-ul local
-        if self._is_status_cache_valid():
-            _LOGGER.debug(
-                "[Hidroelectrica:License] Cache valid — folosesc token existent "
-                "(status=%s, valid_until=%.0f)",
-                self._status_token.get("status"),
-                self._status_token.get("valid_until", 0),
-            )
-            return self._status_token
+        async with self._check_lock:
+            if not force and self._is_status_cache_valid():
+                return self._status_token
+            return await self._async_refresh_status(timeout)
 
-        _LOGGER.debug(
-            "[Hidroelectrica:License] Cache expirat sau inexistent — "
-            "cer status de la server: %s/check",
-            LICENSE_API_URL,
-        )
-
-        # Resetează flag-ul de retry HMAC (permite un retry pe fiecare check ciclu)
-        self._hmac_retry_done = False
-
-        # Trebuie să cerem status de la server
-        timestamp = int(time.time())
+    async def _async_refresh_status(self, timeout: int = 30) -> dict[str, Any]:
+        """Cere statusul la server. Apelat doar cu _check_lock deținut."""
         payload = {
             "fingerprint": self._fingerprint,
-            "timestamp": timestamp,
+            "timestamp": int(time.time()),
             "integration": INTEGRATION,
             "hardware_fingerprint": self._hardware_fingerprint,
             "integration_version": self._integration_version,
             "ha_version": self._ha_version,
         }
-        payload["hmac"] = self._compute_request_hmac(payload)
-
         try:
-            session = self._session
-            async with session.post(
-                f"{LICENSE_API_URL}/check",
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=30),
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": "Hidroelectrica-HA-Integration/3.0",
-                },
-            ) as resp:
-                _LOGGER.debug(
-                    "[Hidroelectrica:License] Server /check răspuns: HTTP %d",
-                    resp.status,
+            http_status, result = await self._async_signed_post("check", payload, timeout)
+        except Exception as err:  # noqa: BLE001 — rețea, timeout, DNS
+            self._register_failure("server inaccesibil la /check — %s", err)
+            return self._status_token
+
+        if http_status != 200 or "status" not in result:
+            if result.get("error") == "invalid_hmac":
+                self._register_failure(
+                    "HMAC invalid la /check — serverul nu recunoaște acest dispozitiv"
                 )
-                result = await resp.json()
-
-                if resp.status == 200 and "status" in result:
-                    # Verifică semnătura serverului pe token
-                    if not self._verify_token_signature(result):
-                        _LOGGER.warning(
-                            "[Hidroelectrica:License] Semnătura token-ului de status "
-                            "e invalidă — ignor răspunsul"
-                        )
-                        return self._status_token
-
-                    # Captează statusul vechi pentru detecție tranziție
-                    old_status = (
-                        self._status_token.get("status")
-                        if self._status_token
-                        else None
-                    )
-
-                    # Salvează noul status token
-                    self._status_token = result
-                    self._data["status_token"] = result
-                    self._data["last_server_check"] = time.time()
-
-                    # Sincronizează license_key din răspunsul serverului
-                    # (important: serverul e sursa de adevăr pentru cheie)
-                    server_key = result.get("license_key")
-                    if server_key and self._data.get("license_key") != server_key:
-                        self._data["license_key"] = server_key
-                        _LOGGER.debug(
-                            "[Hidroelectrica:License] license_key sincronizat "
-                            "din răspunsul /check: %s",
-                            server_key,
-                        )
-
-                    # Salvează client_secret de la server (SEC-01/02)
-                    # Folosit ca cheie HMAC în loc de fingerprint
-                    cs = result.get("client_secret")
-                    if cs:
-                        self._data["client_secret"] = cs
-                        # Elimină din status_token (nu trebuie cached în token)
-                        result.pop("client_secret", None)
-
-                    await self._async_save()
-
-                    # Reset failure tracking la succes
-                    self._consecutive_failures = 0
-                    self._cache_expiry_warned = False
-
-                    server_status = result.get("status")
-                    _LOGGER.debug(
-                        "[Hidroelectrica:License] Status actualizat de la server — %s "
-                        "(valid_until: %s)",
-                        server_status,
-                        result.get("valid_until"),
-                    )
-
-                    # Log explicit de tranziție (vizibil în /logs)
-                    if server_status == "expired":
-                        _LOGGER.warning(
-                            "[Hidroelectrica:License] Server confirmă: EXPIRAT "
-                            "(trial_days_remaining=0)"
-                        )
-                    elif server_status == "trial":
-                        _LOGGER.info(
-                            "[Hidroelectrica:License] Server confirmă: TRIAL "
-                            "(zile rămase: %s)",
-                            result.get("trial_days_remaining", "?"),
-                        )
-
-                    # Auto-reload dacă licența a expirat
-                    if (
-                        old_status in ("licensed", "trial")
-                        and server_status in ("expired", "unlicensed")
-                    ):
-                        _LOGGER.warning(
-                            "[Hidroelectrica:License] Licență expirată "
-                            "(%s → %s) — reload integrare",
-                            old_status,
-                            server_status,
-                        )
-                        await self._async_reload_entries()
-
-                    return result
-
-                # Gestionare invalid_hmac — client_secret desincronizat
-                if result.get("error") == "invalid_hmac":
-                    if self._data.get("client_secret") and not self._hmac_retry_done:
-                        _LOGGER.warning(
-                            "[Hidroelectrica:License] HMAC invalid — client_secret "
-                            "desincronizat. Șterg secretul local și reîncerc..."
-                        )
-                        self._data.pop("client_secret", None)
-                        await self._async_save()
-                        self._hmac_retry_done = True
-                        return await self.async_check_status()  # Retry cu fingerprint
-                    _LOGGER.error(
-                        "[Hidroelectrica:License] HMAC invalid (retry epuizat). "
-                        "Serverul nu recunoaște acest dispozitiv."
-                    )
-                else:
-                    _LOGGER.warning(
-                        "[Hidroelectrica:License] răspuns invalid de la /check — %s",
-                        result,
-                    )
-                return self._status_token
-
-        except aiohttp.ClientError as err:
-            self._consecutive_failures += 1
-            _LOGGER.warning(
-                "[Hidroelectrica:License] eroare de rețea la verificare status "
-                "(încercare #%d) — %s",
-                self._consecutive_failures,
-                err,
-            )
+            else:
+                self._register_failure(
+                    "răspuns invalid de la /check — HTTP %d %s",
+                    http_status, result.get("error") or result.get("detail") or "",
+                )
             return self._status_token
+
+        if not self._verify_token_signature(result):
+            self._register_failure("semnătura token-ului de status e invalidă — ignor răspunsul")
+            return self._status_token
+        if not self._token_matches(result):
+            self._register_failure("token de status pentru alt dispozitiv/integrare — ignor răspunsul")
+            return self._status_token
+
+        self._status_token = result
+        self._data["status_token"] = result
+        self._data["last_server_check"] = time.time()
+
+        # Serverul e sursa de adevăr pentru cheie și pentru client_secret
+        server_key = result.get("license_key")
+        if server_key and self._data.get("license_key") != server_key:
+            self._data["license_key"] = server_key
+        client_secret = result.get("client_secret")
+        if client_secret and self._data.get("client_secret") != client_secret:
+            self._data["client_secret"] = client_secret
+
+        await self._async_save()
+        self._cache_expiry_warned = False
+        self._consecutive_failures = 0
+
+        server_status = result.get("status")
+        _LOGGER.debug(
+            "[Hidroelectrica:License] Status de la server: %s (valid_until: %s)",
+            server_status, result.get("valid_until"),
+        )
+
+        # Heartbeat-ul licenței: WebAPI ține evidența instalărilor licențiate
+        # active (last_heartbeat, versiuni) DOAR prin /validate.
+        if server_status == "licensed":
+            await self._async_validate(timeout)
+
+        return self._status_token
+
+    async def _async_validate(self, timeout: int = 30) -> bool:
+        """Trimite /validate pentru licența activă. Apelat doar cu _check_lock deținut."""
+        key = self._status_token.get("license_key") or self._data.get("license_key")
+        if not key:
+            return False
+        payload = {
+            "license_key": key,
+            "fingerprint": self._fingerprint,
+            "timestamp": int(time.time()),
+            "integration": INTEGRATION,
+            "integration_version": self._integration_version,
+            "ha_version": self._ha_version,
+        }
+        try:
+            http_status, result = await self._async_signed_post("validate", payload, timeout)
         except Exception as err:  # noqa: BLE001
-            self._consecutive_failures += 1
-            _LOGGER.warning(
-                "[Hidroelectrica:License] eroare neașteptată la verificare status "
-                "(încercare #%d) — %s",
-                self._consecutive_failures,
-                err,
-            )
-            return self._status_token
-
-    def _is_status_cache_valid(self) -> bool:
-        """Verifică dacă token-ul de status cached e încă valid.
-
-        valid_until e setat de server — controlează cât timp
-        clientul poate funcționa fără o nouă verificare.
-        """
-        if not self._status_token:
+            _LOGGER.debug("[Hidroelectrica:License] /validate eșuat (rețea) — %s", err)
             return False
 
+        if http_status == 200 and result.get("valid"):
+            self._data["last_validation"] = time.time()
+            await self._async_save()
+            return True
+
+        error = result.get("error") or f"http_{http_status}"
+        _LOGGER.warning("[Hidroelectrica:License] /validate respins — %s", error)
+        if error in _VALIDATE_DEFINITIVE_ERRORS and not self._revalidating:
+            # Licența nu mai e activă pe acest dispozitiv (revocată, mutată, expirată):
+            # nu mai așteptăm expirarea cache-ului — cerem imediat statusul real.
+            self._revalidating = True
+            try:
+                await self._async_refresh_status(timeout)
+            finally:
+                self._revalidating = False
+        return False
+
+    def _is_status_cache_valid(self) -> bool:
+        """Token-ul de status cached e încă valid (valid_until setat de server)?"""
+        if not self._status_token:
+            return False
         valid_until = self._status_token.get("valid_until")
         if not valid_until:
             return False
-
         return time.time() < valid_until
 
     def _is_within_grace_period(self) -> bool:
-        """Verifică dacă suntem în perioada de grație după expirarea cache-ului.
+        """Cache expirat dar server temporar inaccesibil: 72h licențiat / 24h trial.
 
-        Scenariul: serverul e temporar inaccesibil (mentenanță, probleme de rețea).
-        Cache-ul a expirat (valid_until < now), dar:
-        - Licențiat (cu token Ed25519 verificabil local): 72h de grație
-        - Trial (fără token local): 24h de grație
-
-        IMPORTANT: Grația NU extinde o licență expirată real (expires_at depășit).
-        Se aplică DOAR pentru indisponibilitate temporară a serverului.
-        Serverul RĂMÂNE sursa de adevăr — la reconectare, decizia serverului prevalează.
+        Grația NU extinde o licență expirată real (expires_at depășit) și nu se
+        aplică statusurilor expired/unlicensed. La reconectare decide serverul.
         """
         if not self._status_token:
             return False
-
         valid_until = self._status_token.get("valid_until", 0)
         if valid_until <= 0:
             return False
-
         now = time.time()
-
-        # Dacă cache-ul e încă valid, nu suntem în perioadă de grație
         if now < valid_until:
             return False
 
-        # Determină durata de grație pe baza ultimului status cunoscut
         last_status = self._status_token.get("status", "unlicensed")
-
         if last_status == "licensed":
-            # Verifică suplimentar: token-ul de activare nu a expirat real
-            token = self._data.get("activation_token")
-            if token and isinstance(token, dict):
-                expires_at = token.get("expires_at")
-                if expires_at and now > expires_at:
-                    # Licența a expirat real (data din token) — fără grație
-                    return False
+            expires_at = self.license_expires_at
+            if expires_at and now > expires_at:
+                return False
             grace_seconds = self._GRACE_LICENSED_SEC
         elif last_status == "trial":
             grace_seconds = self._GRACE_TRIAL_SEC
         else:
-            # expired / unlicensed — fără grație
             return False
-
         return now < valid_until + grace_seconds
 
-    # ─── Proprietăți de status (toate derivate din token-ul serverului) ───
+    # ─── Proprietăți de status (derivate din token-ul serverului) ───
 
     @property
     def is_trial_valid(self) -> bool:
-        """Verifică dacă perioada de evaluare e activă (conform server).
-
-        Acceptă și perioadă de grație: dacă cache-ul a expirat dar suntem
-        în grace period (server temporar inaccesibil), trial rămâne valid.
-        """
+        """Perioada de evaluare e activă (inclusiv grația la server inaccesibil)."""
         if self._status_token.get("status") != "trial":
             return False
         return self._is_status_cache_valid() or self._is_within_grace_period()
 
     @property
     def trial_days_remaining(self) -> int:
-        """Returnează zilele rămase din trial (de la server)."""
+        """Zilele rămase din trial (de la server)."""
         if self._status_token.get("status") != "trial":
             return 0
         return max(0, int(self._status_token.get("trial_days_remaining", 0)))
 
-    @property
-    def is_licensed(self) -> bool:
-        """Verifică dacă există o licență activă și validă.
-
-        Verifică ATÂT token-ul de activare (Ed25519) CÂT ȘI
-        faptul că serverul confirmă statusul 'licensed'.
-        """
+    def _local_activation_token(self) -> dict[str, Any] | None:
+        """Token-ul de activare local, doar dacă e semnat de server și e al acestui dispozitiv."""
         token = self._data.get("activation_token")
         if not token or not isinstance(token, dict):
+            return None
+        if not self._token_matches(token) or not self._verify_token_signature(token):
+            return None
+        return token
+
+    @property
+    def is_licensed(self) -> bool:
+        """Licență activă: token de activare valid local + serverul nu contrazice."""
+        token = self._local_activation_token()
+        if token is None:
             return False
 
-        # Verifică semnătura token-ului de activare
-        if not self._verify_token_signature(token):
-            _LOGGER.warning("[Hidroelectrica:License] semnătură token activare invalidă")
-            return False
-
-        # Verifică fingerprint-ul din token-ul de activare
-        if token.get("fingerprint") != self._fingerprint:
-            _LOGGER.warning("[Hidroelectrica:License] fingerprint token nu se potrivește")
-            return False
-
-        # Verifică expirarea din token-ul de activare (licențe anuale)
         expires_at = token.get("expires_at")
         if expires_at and time.time() > expires_at:
-            _LOGGER.info("[Hidroelectrica:License] licența a expirat (token local)")
             return False
 
-        # Verifică și status-ul de la server (dacă avem cache valid)
         if self._status_token and self._is_status_cache_valid():
-            server_status = self._status_token.get("status")
-            if server_status not in ("licensed", "trial"):
-                _LOGGER.warning(
-                    "[Hidroelectrica:License] serverul raportează status '%s' — licență invalidă",
-                    server_status,
-                )
-                return False
+            # Serverul are ultimul cuvânt
+            return self._status_token.get("status") in ("licensed", "trial")
 
-        # Dacă cache-ul de status a expirat, licența e invalidă
-        # (serverul controlează intervalul de verificare)
         if self._status_token and not self._is_status_cache_valid():
             if self._is_within_grace_period():
                 if not self._cache_expiry_warned:
-                    valid_until = self._status_token.get("valid_until", 0)
-                    grace_end = valid_until + self._GRACE_LICENSED_SEC
-                    hours_left = max(0, int((grace_end - time.time()) / 3600))
+                    grace_end = self._status_token.get("valid_until", 0) + self._GRACE_LICENSED_SEC
                     _LOGGER.warning(
-                        "[Hidroelectrica:License] cache expirat — funcționare în perioadă "
-                        "de grație (%d ore rămase). Se reîncearcă contactarea serverului.",
-                        hours_left,
+                        "[Hidroelectrica:License] Server inaccesibil — funcționare în perioada "
+                        "de grație (%d ore rămase)",
+                        max(0, int((grace_end - time.time()) / 3600)),
                     )
                     self._cache_expiry_warned = True
-            else:
-                if not self._cache_expiry_warned:
-                    _LOGGER.warning(
-                        "[Hidroelectrica:License] cache expirat + perioadă de grație depășită "
-                        "— licență invalidă. Verificați conexiunea la server."
-                    )
-                    self._cache_expiry_warned = True
-                return False
+                return True
+            if not self._cache_expiry_warned:
+                _LOGGER.warning(
+                    "[Hidroelectrica:License] Cache expirat + perioadă de grație depășită "
+                    "— licență invalidă. Verificați conexiunea la server."
+                )
+                self._cache_expiry_warned = True
+            return False
 
+        # Fără niciun status de la server (ex: imediat după activare, server căzut)
         return True
 
     @property
     def is_valid(self) -> bool:
-        """Verifică dacă integrarea poate funcționa (licență SAU trial).
+        """Poate funcționa integrarea (licență SAU trial)?
 
-        Ordinea de verificare (de la cel mai fiabil la fallback):
-        1. Cache valid + server confirmă 'licensed'/'trial' → True
-        2. Perioadă de grație activă (server inaccesibil, dar status era ok) → True
-        3. Fallback local: token Ed25519 valid + trial valid → True/False
+        1. Cache valid + server confirmă 'licensed'/'trial'
+        2. Perioadă de grație (server inaccesibil, ultimul status era ok)
+        3. Fallback local: token de activare valid
         """
-        # 1. Serverul e sursa de adevăr (cache valid)
         if self._status_token and self._is_status_cache_valid():
-            server_status = self._status_token.get("status")
-            if server_status in ("licensed", "trial"):
+            if self._status_token.get("status") in ("licensed", "trial"):
                 return True
-
-        # 2. Perioadă de grație (server temporar inaccesibil)
         if self._status_token and self._is_within_grace_period():
-            server_status = self._status_token.get("status")
-            if server_status in ("licensed", "trial"):
+            if self._status_token.get("status") in ("licensed", "trial"):
                 return True
-
-        # 3. Fallback: verificare locală (token de activare + trial)
         return self.is_licensed or self.is_trial_valid
 
     @property
+    def has_license(self) -> bool:
+        """Dispozitivul a avut o licență (pentru a deosebi „licență expirată" de „trial expirat")."""
+        return bool(
+            self._local_activation_token()
+            or self._status_token.get("license_key")
+        )
+
+    @property
     def license_type(self) -> str | None:
-        """Returnează tipul licenței active: 'perpetual', 'annual' sau None."""
-        token = self._data.get("activation_token")
-        if token and isinstance(token, dict):
-            return token.get("license_type")
-        # Verifică și din status token (pentru trial)
-        return self._status_token.get("license_type")
+        """Tipul licenței: 'perpetual', 'annual', 'semi_annual', 'monthly' sau None."""
+        if self._status_token.get("license_type"):
+            return self._status_token["license_type"]
+        token = self._local_activation_token()
+        return token.get("license_type") if token else None
 
     @property
     def license_key_masked(self) -> str | None:
-        """Returnează cheia de licență mascată (ex: HDEL-XXXX-****)."""
+        """Cheia de licență mascată (ex: HDEL-XXXX-****)."""
         key = self._data.get("license_key")
         if not key or len(key) < 10:
             return key
@@ -703,418 +652,202 @@ class LicenseManager:
 
     @property
     def activated_at(self) -> float | None:
-        """Returnează timestamp-ul activării licenței sau None."""
-        # 1. Din activation_token (salvat la activare)
-        token = self._data.get("activation_token")
-        if token and isinstance(token, dict):
-            ts = token.get("activated_at")
-            if ts:
-                return ts
-        # 2. Din _data (salvat explicit la activare)
-        ts = self._data.get("activated_at")
-        if ts:
-            return ts
-        # 3. Din status_token (dacă serverul îl trimite)
-        if self._status_token:
-            return self._status_token.get("activated_at")
-        return None
+        """Momentul activării licenței sau None."""
+        if self._status_token.get("activated_at"):
+            return self._status_token["activated_at"]
+        token = self._local_activation_token()
+        if token and token.get("activated_at"):
+            return token["activated_at"]
+        return self._data.get("activated_at")
 
     @property
     def license_expires_at(self) -> float | None:
-        """Returnează timestamp-ul de expirare sau None (perpetual)."""
-        # 1. Din activation_token (salvat la activare)
-        token = self._data.get("activation_token")
-        if token and isinstance(token, dict):
-            ea = token.get("expires_at")
-            if ea:
-                return ea
-        # 2. Fallback: din status_token (de la server /check)
-        if self._status_token:
-            return self._status_token.get("expires_at")
-        return None
+        """Momentul expirării licenței sau None (perpetuă / necunoscut)."""
+        st = self._status_token
+        if st.get("expires_at"):
+            return st["expires_at"]
+        if st.get("expired_at"):  # răspunsul /check pentru o licență expirată
+            return st["expired_at"]
+        token = self._local_activation_token()
+        return token.get("expires_at") if token else None
 
     @property
     def status(self) -> str:
-        """Returnează starea curentă a licenței.
+        """Starea curentă: 'licensed', 'trial', 'expired' sau 'unlicensed'.
 
-        Prioritizează răspunsul serverului (din status_token).
-        Valori posibile: 'licensed', 'trial', 'expired', 'unlicensed'.
-
-        Când cache-ul e expirat dar suntem în perioadă de grație,
-        returnează ultimul status cunoscut (nu 'expired').
+        Prioritizează răspunsul serverului; în grație returnează ultimul status bun.
         """
-        # Dacă avem status valid de la server, îl folosim
         if self._status_token and self._is_status_cache_valid():
             server_status = self._status_token.get("status", "unlicensed")
             if server_status in ("licensed", "trial", "expired"):
                 return server_status
-
-        # Perioadă de grație — returnează ultimul status cunoscut
         if self._status_token and self._is_within_grace_period():
             server_status = self._status_token.get("status", "unlicensed")
             if server_status in ("licensed", "trial"):
                 return server_status
-
-        # Dacă avem token de activare dar cache expirat (fără grație)
-        if self._data.get("activation_token"):
+        if self.is_licensed:
+            return "licensed"
+        if self._status_token.get("status") == "expired" or self._local_activation_token():
             return "expired"
-
         return "unlicensed"
 
     @property
     def needs_heartbeat(self) -> bool:
-        """Verifică dacă e timpul pentru o verificare la server.
-
-        Intervalul e controlat de server via `valid_until`.
-        Nu mai există constantă locală LICENSE_CHECK_INTERVAL_SEC.
-        """
+        """E timpul pentru o verificare la server (intervalul vine din `valid_until`)."""
         return not self._is_status_cache_valid()
 
     @property
     def check_interval_seconds(self) -> int:
-        """Returnează intervalul de verificare (secundele până la valid_until).
+        """Secunde până la următoarea verificare necesară.
 
-        Folosit de __init__.py pentru a programa heartbeat-ul.
-        Dacă nu avem informație de la server, implicit 4 ore (conservator).
-
-        Când cache-ul e expirat, folosește backoff exponențial:
-        - Prima încercare: 60s (reacție rapidă)
-        - Încercări 2-5: 300s (5 min)
-        - Încercări 6-12: 1800s (30 min)
-        - Încercări 13+: 3600s (1 oră)
-        Previne bombardarea unui server indisponibil.
+        - Cache valid: până la `valid_until` (max 24h).
+        - Cache expirat sau inexistent (ex: rețea indisponibilă la pornirea HA):
+          backoff 60s → 5 min → 30 min → 1h, ca să nu bombardăm un server căzut,
+          dar nici să lăsăm integrarea blocată ore întregi.
         """
-        if not self._status_token:
-            return 4 * 3600  # 4 ore implicit (conservative)
-
-        valid_until = self._status_token.get("valid_until", 0)
+        valid_until = (self._status_token or {}).get("valid_until", 0)
         remaining = valid_until - time.time()
-
-        if remaining <= 0:
-            # Cache expirat — backoff bazat pe eșecuri consecutive
-            failures = self._consecutive_failures
-            if failures <= 0:
-                return 60   # Prima verificare: reacție rapidă (1 min)
-            if failures <= 5:
-                return 300  # 5 minute
-            if failures <= 12:
-                return 1800  # 30 minute
-            return 3600  # 1 oră (nu bombardăm serverul)
-
-        # Nu depăși 24h chiar dacă serverul zice mai mult
-        return min(int(remaining), 24 * 3600)
-
-    # ─── Verificare status la server (alias pentru heartbeat) ───
+        if remaining > 0:
+            return max(1, min(int(remaining), 24 * 3600))
+        failures = self._consecutive_failures
+        if failures <= 1:
+            return 60
+        if failures <= 5:
+            return 300
+        if failures <= 12:
+            return 1800
+        return 3600
 
     async def async_heartbeat(self) -> bool:
-        """Trimite un heartbeat de validare la server.
+        """Verificare periodică: /check (dacă cache-ul a expirat) + /validate pentru licențe.
 
-        În v2, heartbeat = async_check_status() + validate (dacă licențiat).
-        Returnează True dacă validarea a reușit.
+        Returnează is_valid după verificare.
         """
-        # 1. Verifică statusul general
         await self.async_check_status()
-
-        # 2. Dacă are licență activă, trimite și validate
-        token = self._data.get("activation_token")
-        if not token:
-            return self._is_status_cache_valid()
-
-        timestamp = int(time.time())
-        payload = {
-            "license_key": self._data.get("license_key", ""),
-            "fingerprint": self._fingerprint,
-            "timestamp": timestamp,
-            "integration": INTEGRATION,
-            "integration_version": self._integration_version,
-            "ha_version": self._ha_version,
-        }
-        payload["hmac"] = self._compute_request_hmac(payload)
-
-        try:
-            session = self._session
-            async with session.post(
-                f"{LICENSE_API_URL}/validate",
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=30),
-                    headers={
-                        "Content-Type": "application/json",
-                        "User-Agent": "Hidroelectrica-HA-Integration/3.0",
-                    },
-                ) as resp:
-                    result = await resp.json()
-
-                    if resp.status == 200 and result.get("valid"):
-                        self._data["last_validation"] = time.time()
-
-                        # Dacă serverul trimite un token reînnoit
-                        new_token = result.get("token")
-                        if new_token and self._verify_token_signature(
-                            new_token
-                        ):
-                            self._data["activation_token"] = new_token
-
-                        await self._async_save()
-                        return True
-
-                    _LOGGER.warning(
-                        "[Hidroelectrica:License] heartbeat respins — %s",
-                        result.get("error", "necunoscut"),
-                    )
-                    return False
-
-        except Exception:  # noqa: BLE001
-            _LOGGER.debug("[Hidroelectrica:License] heartbeat eșuat (rețea indisponibilă)")
-            return False
+        return self.is_valid
 
     # ─── Activare licență ───
 
     async def async_activate(self, license_key: str) -> dict[str, Any]:
-        """Activează o cheie de licență prin API.
+        """Activează o cheie de licență.
 
-        Trimite: {license_key, fingerprint, timestamp, hmac}
-        Primește: {success, token: {license_key, license_type,
-                   fingerprint, activated_at, expires_at, signature}}
-
-        Returnează: {"success": True} sau {"success": False, "error": "..."}
+        Returnează {"success": True} sau {"success": False, "error": "<cod>"} cu
+        codurile serverului: invalid_key, already_used, expired_key, invalid_hmac
+        + locale: invalid_signature, fingerprint_mismatch, network_error, http_<cod>.
         """
-        timestamp = int(time.time())
-
+        key = license_key.strip().upper()
         payload = {
-            "license_key": license_key.strip().upper(),
+            "license_key": key,
             "fingerprint": self._fingerprint,
-            "timestamp": timestamp,
+            "timestamp": int(time.time()),
             "integration": INTEGRATION,
         }
-        payload["hmac"] = self._compute_request_hmac(payload)
-
         try:
-            session = self._session
-            async with session.post(
-                f"{LICENSE_API_URL}/activate",
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=30),
-                    headers={
-                        "Content-Type": "application/json",
-                        "User-Agent": "Hidroelectrica-HA-Integration/3.0",
-                    },
-                ) as resp:
-                    _LOGGER.debug(
-                        "[Hidroelectrica:License] /activate răspuns: HTTP %d",
-                        resp.status,
-                    )
-
-                    # Serverul a returnat eroare HTTP (500, 422, etc.)
-                    if resp.status != 200:
-                        try:
-                            body = await resp.text()
-                        except Exception:  # noqa: BLE001
-                            body = "(nu s-a putut citi)"
-                        _LOGGER.warning(
-                            "[Hidroelectrica:License] activare eșuată — "
-                            "HTTP %d: %s",
-                            resp.status,
-                            body[:500],
-                        )
-                        return {
-                            "success": False,
-                            "error": f"http_{resp.status}",
-                        }
-
-                    result = await resp.json()
-
-                    if result.get("success"):
-                        token = result.get("token", {})
-
-                        # Verifică semnătura serverului
-                        if not self._verify_token_signature(token):
-                            return {
-                                "success": False,
-                                "error": "invalid_signature",
-                            }
-
-                        # Verifică că token-ul e pentru noi
-                        if token.get("fingerprint") != self._fingerprint:
-                            return {
-                                "success": False,
-                                "error": "fingerprint_mismatch",
-                            }
-
-                        # Salvează token-ul
-                        self._data["activation_token"] = token
-                        self._data["license_key"] = (
-                            license_key.strip().upper()
-                        )
-                        self._data["last_validation"] = time.time()
-                        self._data["activated_at"] = token.get(
-                            "activated_at"
-                        )
-                        await self._async_save()
-
-                        # Invalidează cache-ul de status vechi (trial)
-                        # ca async_check_status() să facă request fresh
-                        self._status_token = {}
-                        self._data.pop("status_token", None)
-
-                        # Actualizează status-ul de la server (acum va fi 'licensed')
-                        await self.async_check_status()
-
-                        _LOGGER.info(
-                            "[Hidroelectrica:License] licență activată cu succes (%s)",
-                            token.get("license_type", "necunoscut"),
-                        )
-
-                        # Auto-reload: reîncarcă toate entry-urile hidroelectrica
-                        # ca senzorii să se recreeze cu licență validă
-                        await self._async_reload_entries()
-
-                        return {"success": True}
-
-                    error = result.get("error", "unknown")
-                    _LOGGER.warning(
-                        "[Hidroelectrica:License] activare eșuată — %s (răspuns: %s)",
-                        error,
-                        result,
-                    )
-                    return {"success": False, "error": error}
-
-        except aiohttp.ClientError as err:
-            _LOGGER.error(
-                "[Hidroelectrica:License] eroare de rețea la activare — %s", err
-            )
-            return {"success": False, "error": "network_error"}
+            http_status, result = await self._async_signed_post("activate", payload)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error(
-                "[Hidroelectrica:License] eroare neașteptată la activare — %s", err
+            _LOGGER.error("[Hidroelectrica:License] eroare de rețea la activare — %s", err)
+            return {"success": False, "error": "network_error"}
+
+        if http_status != 200:
+            _LOGGER.warning(
+                "[Hidroelectrica:License] activare eșuată — HTTP %d %s",
+                http_status, result.get("detail") or result.get("error") or "",
             )
-            return {"success": False, "error": "unknown_error"}
+            return {"success": False, "error": f"http_{http_status}"}
+
+        if not result.get("success"):
+            error = result.get("error", "unknown_error")
+            _LOGGER.warning("[Hidroelectrica:License] activare eșuată — %s", error)
+            return {"success": False, "error": error}
+
+        token = result.get("token") or {}
+        if not self._verify_token_signature(token):
+            return {"success": False, "error": "invalid_signature"}
+        if not self._token_matches(token):
+            return {"success": False, "error": "fingerprint_mismatch"}
+
+        self._data["activation_token"] = token
+        self._data["license_key"] = key
+        self._data["activated_at"] = token.get("activated_at")
+        self._data["last_validation"] = time.time()
+        # Statusul vechi (trial/expired) nu mai e relevant
+        self._status_token = {}
+        self._data.pop("status_token", None)
+        await self._async_save()
+
+        await self.async_check_status(force=True)
+        _LOGGER.info(
+            "[Hidroelectrica:License] licență activată cu succes (%s)",
+            token.get("license_type", "necunoscut"),
+        )
+        # Senzorii se recreează cu licența validă
+        await self._async_reload_entries()
+        return {"success": True}
 
     # ─── Dezactivare ───
 
     async def async_deactivate(self) -> dict[str, Any]:
-        """Dezactivează licența curentă (pentru mutare pe alt server).
-
-        Trimite cerere de dezactivare la API, apoi șterge token-ul local.
-        """
-        token = self._data.get("activation_token")
-        if not token:
+        """Dezactivează licența curentă (pentru mutare pe alt server)."""
+        key = self._data.get("license_key")
+        if not key:
             return {"success": False, "error": "no_license"}
 
-        timestamp = int(time.time())
         payload = {
-            "license_key": self._data.get("license_key", ""),
+            "license_key": key,
             "fingerprint": self._fingerprint,
-            "timestamp": timestamp,
+            "timestamp": int(time.time()),
             "integration": INTEGRATION,
         }
-        payload["hmac"] = self._compute_request_hmac(payload)
-
         try:
-            session = self._session
-            async with session.post(
-                f"{LICENSE_API_URL}/deactivate",
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=30),
-                    headers={
-                        "Content-Type": "application/json",
-                        "User-Agent": "Hidroelectrica-HA-Integration/3.0",
-                    },
-                ) as resp:
-                    result = await resp.json()
-
-                    if resp.status == 200 and result.get("success"):
-                        # Șterge token-ul local
-                        self._data.pop("activation_token", None)
-                        self._data.pop("license_key", None)
-                        self._data.pop("last_validation", None)
-                        self._data.pop("activated_at", None)
-                        await self._async_save()
-
-                        # Invalidează cache-ul de status vechi (licensed)
-                        self._status_token = {}
-                        self._data.pop("status_token", None)
-
-                        # Actualizează status-ul de la server
-                        await self.async_check_status()
-
-                        _LOGGER.info(
-                            "[Hidroelectrica:License] licență dezactivată cu succes"
-                        )
-
-                        # Auto-reload: reîncarcă entry-urile
-                        await self._async_reload_entries()
-
-                        return {"success": True}
-
-                    return {
-                        "success": False,
-                        "error": result.get("error", "server_error"),
-                    }
-
+            http_status, result = await self._async_signed_post("deactivate", payload)
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("[Hidroelectrica:License] eroare la dezactivare — %s", err)
             return {"success": False, "error": "network_error"}
 
-    # ─── Notificări lifecycle (disable / remove) ───
+        if http_status != 200 or not result.get("success"):
+            return {"success": False, "error": result.get("error") or f"http_{http_status}"}
+
+        for k in ("activation_token", "license_key", "last_validation", "activated_at", "status_token"):
+            self._data.pop(k, None)
+        self._status_token = {}
+        await self._async_save()
+
+        await self.async_check_status(force=True)
+        _LOGGER.info("[Hidroelectrica:License] licență dezactivată cu succes")
+        await self._async_reload_entries()
+        return {"success": True}
+
+    # ─── Notificări lifecycle (disable / enable / remove) ───
 
     async def async_notify_event(self, action: str) -> None:
-        """Trimite un eveniment de lifecycle la server (fire-and-forget).
+        """Eveniment de lifecycle către server (fire-and-forget, doar audit).
 
-        Acțiuni suportate: 'integration_disabled', 'integration_removed'.
-        Nu afectează starea licenței — doar loghează în audit_log.
+        Acțiuni: 'integration_disabled', 'integration_enabled', 'integration_removed'.
         """
-        timestamp = int(time.time())
         payload = {
             "fingerprint": self._fingerprint,
-            "timestamp": timestamp,
+            "timestamp": int(time.time()),
             "action": action,
             "license_key": self._data.get("license_key", ""),
             "integration": INTEGRATION,
         }
-        payload["hmac"] = self._compute_request_hmac(payload)
-
         try:
-            session = self._session
-            async with session.post(
-                f"{LICENSE_API_URL}/notify",
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                    headers={
-                        "Content-Type": "application/json",
-                        "User-Agent": "Hidroelectrica-HA-Integration/3.0",
-                    },
-                ) as resp:
-                    if resp.status == 200:
-                        result = await resp.json()
-                        if not result.get("success"):
-                            _LOGGER.warning(
-                                "[Hidroelectrica:License] Server a refuzat '%s': %s",
-                                action, result.get("error"),
-                            )
-                    else:
-                        _LOGGER.warning(
-                            "[Hidroelectrica:License] Notify HTTP %d pentru '%s'",
-                            resp.status, action,
-                        )
+            http_status, result = await self._async_signed_post("notify", payload, timeout=10)
+            if http_status != 200 or not result.get("success"):
+                _LOGGER.debug(
+                    "[Hidroelectrica:License] Notify '%s' refuzat: HTTP %d %s",
+                    action, http_status, result.get("error"),
+                )
         except Exception as err:  # noqa: BLE001
-            # Fire-and-forget: nu blocăm unload-ul dacă rețeaua e indisponibilă
-            _LOGGER.debug(
-                "[Hidroelectrica:License] Nu s-a putut raporta '%s': %s",
-                action, err,
-            )
+            _LOGGER.debug("[Hidroelectrica:License] Nu s-a putut raporta '%s': %s", action, err)
 
     # ─── Reload entries ───
 
     async def _async_reload_entries(self) -> None:
-        """Reîncarcă toate entry-urile hidroelectrica după activare/dezactivare.
-
-        Acest lucru recreează senzorii cu starea corectă de licență,
-        fără ca utilizatorul să fie nevoit să facă reload manual.
-        """
+        """Reîncarcă toate entry-urile Hidroelectrica (senzorii se recreează cu noul status)."""
         entries = self._hass.config_entries.async_entries(DOMAIN)
         if not entries:
             return
-
         _LOGGER.info(
             "[Hidroelectrica:License] Reîncarc %d entry-uri după schimbarea licenței",
             len(entries),
@@ -1131,9 +864,7 @@ class LicenseManager:
 
         Token-ul conține diverse câmpuri + 'signature'.
         Semnătura e calculată pe JSON-ul celorlalte câmpuri (sort_keys).
-
-        SEC-03: Încearcă toate cheile publice din SERVER_PUBLIC_KEYS_PEM
-        (suport key rotation — prima cheie care validează câștigă).
+        Încearcă toate cheile publice din SERVER_PUBLIC_KEYS_PEM (SEC-03 key rotation).
         """
         try:
             from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -1155,10 +886,10 @@ class LicenseManager:
             }
             message = json.dumps(signed_data, sort_keys=True).encode()
 
-            # Încearcă fiecare cheie publică (key rotation support)
-            for key_pem in SERVER_PUBLIC_KEYS_PEM:
+            # Încearcă fiecare cheie publică (key rotation)
+            for pem in SERVER_PUBLIC_KEYS_PEM:
                 try:
-                    public_key = load_pem_public_key(key_pem.encode())
+                    public_key = load_pem_public_key(pem.encode())
                     if not isinstance(public_key, Ed25519PublicKey):
                         continue
                     public_key.verify(signature, message)
@@ -1166,9 +897,7 @@ class LicenseManager:
                 except Exception:  # noqa: BLE001
                     continue
 
-            _LOGGER.debug(
-                "[Hidroelectrica:License] nicio cheie publică nu a validat semnătura"
-            )
+            _LOGGER.debug("[Hidroelectrica:License] nicio cheie publică nu a validat semnătura")
             return False
 
         except Exception as err:  # noqa: BLE001
@@ -1180,17 +909,15 @@ class LicenseManager:
     def _compute_request_hmac(self, payload: dict[str, Any]) -> str:
         """Calculează HMAC-SHA256 pentru integritatea request-ului.
 
-        Cheia HMAC = client_secret (de la server, unic per instalare).
-        Fallback pe fingerprint dacă client_secret nu e disponibil încă
-        (prima rulare, înainte de primul /check).
+        Cheia HMAC = client_secret (v3.1) cu fallback pe fingerprint.
+        Mesajul = JSON al payload-ului fără câmpul 'hmac'.
         """
+        hmac_key = self._data.get("client_secret") or self._fingerprint
         data = {
             k: v for k, v in payload.items()
             if k not in ("hmac", "hardware_fingerprint", "integration_version", "ha_version")
         }
         msg = json.dumps(data, sort_keys=True).encode()
-        # Folosește client_secret dacă e disponibil (v3.1)
-        hmac_key = self._data.get("client_secret") or self._fingerprint
         return hmac_lib.new(
             hmac_key.encode(),
             msg,
@@ -1200,7 +927,7 @@ class LicenseManager:
     # ─── Info (pentru UI / diagnostics) ───
 
     def as_dict(self) -> dict[str, Any]:
-        """Returnează informațiile de licență pentru diagnostics/UI."""
+        """Informațiile de licență pentru diagnostics/UI (fără secrete)."""
         return {
             "status": self.status,
             "fingerprint": self._fingerprint[:16] + "...",
@@ -1209,4 +936,5 @@ class LicenseManager:
             "license_key": self.license_key_masked,
             "is_valid": self.is_valid,
             "cache_valid": self._is_status_cache_valid(),
+            "consecutive_failures": self._consecutive_failures,
         }

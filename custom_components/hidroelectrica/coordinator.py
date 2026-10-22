@@ -246,6 +246,17 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
                     meter_read_history,
                 ) = await asyncio.gather(*heavy_tasks)
 
+                # Un istoric care nu a răspuns acum nu dispare: se păstrează cel
+                # anterior până la următorul heavy refresh reușit.
+                if usage is None:
+                    usage = prev.get("usage")
+                if billing_history is None:
+                    billing_history = prev.get("billing_history")
+                if meter_counter_series is None:
+                    meter_counter_series = prev.get("meter_counter_series")
+                if meter_read_history is None:
+                    meter_read_history = prev.get("meter_read_history")
+
                 _LOGGER.debug(
                     "Date grele (UAN=%s): usage=%s, billing=%s, "
                     "counter_series=%s, read_history=%s.",
@@ -294,7 +305,10 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
             1 for v in (multi_meter, bill, window_dates_enc, window_dates, pods)
             if v is not None
         )
-        if available_count == 0 and self._refresh_counter == 0:
+        if available_count == 0:
+            # Server indisponibil / sesiune respinsă: entitățile devin indisponibile
+            # și își păstrează ultimele valori (înainte, după primul refresh,
+            # datele erau înlocuite cu None și senzorii afișau valori false).
             _LOGGER.error(
                 "Niciun endpoint esențial nu a returnat date (UAN=%s, acc=%s). "
                 "Verificați dacă AccountNumber este corect.",
@@ -303,7 +317,7 @@ class HidroelectricaCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(
                 "Nu s-au putut obține datele esențiale de la Hidroelectrica."
             )
-        elif available_count < 3:
+        if available_count < 3:
             _LOGGER.warning(
                 "Doar %s din 5 endpoint-uri esențiale au returnat date (UAN=%s).",
                 available_count, uan,

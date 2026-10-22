@@ -2,24 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.components import persistent_notification
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.event import (
-    async_track_point_in_time,
-    async_track_time_interval,
-)
-from homeassistant.util import dt as dt_util
-from homeassistant.helpers.update_coordinator import UpdateFailed
+from homeassistant.helpers.event import async_call_later
 
-from .api import HidroelectricaApiClient
+from .api import HidroelectricaApiClient, HidroelectricaApiError, HidroelectricaAuthError
 from .const import (
     CONF_ACCOUNT_METADATA,
     CONF_PASSWORD,
@@ -34,9 +30,18 @@ from .const import (
     PLATFORMS,
 )
 from .coordinator import HidroelectricaCoordinator
+from .helpers import build_account_metadata, extract_all_accounts
 from .license import LicenseManager
 
 _LOGGER = logging.getLogger(__name__)
+
+# Stările în care o intrare încă folosește managerul de licențe
+_STARI_ACTIVE = (
+    ConfigEntryState.LOADED,
+    ConfigEntryState.SETUP_IN_PROGRESS,
+    ConfigEntryState.SETUP_RETRY,
+    ConfigEntryState.UNLOAD_IN_PROGRESS,
+)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -47,6 +52,18 @@ class HidroelectricaRuntimeData:
 
     coordinators: dict[str, HidroelectricaCoordinator] = field(default_factory=dict)
     api_client: HidroelectricaApiClient | None = None
+    # Configurația (fără token-ul SEW) la momentul setup-ului — vezi _async_update_options
+    config_signature: str = ""
+
+
+def _config_signature(entry: ConfigEntry) -> str:
+    """Amprenta configurației care contează pentru reload.
+
+    `token_data` e exclus: coordinatorul salvează token-ul SEW în entry.data
+    după fiecare re-login, iar asta NU trebuie să reîncarce integrarea.
+    """
+    data = {k: v for k, v in entry.data.items() if k != "token_data"}
+    return json.dumps([data, dict(entry.options)], sort_keys=True, default=str)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -64,9 +81,7 @@ def _update_license_notifications(hass: HomeAssistant, mgr: LicenseManager) -> N
         persistent_notification.async_dismiss(hass, "hidroelectrica_license_expired")
         return
 
-    has_token = bool(mgr._data.get("activation_token"))
-
-    if has_token:
+    if mgr.has_license:
         issue_id = "license_expired"
         notif_title = "Hidroelectrica România — Licența a expirat"
         notif_message = (
@@ -108,6 +123,108 @@ def _update_license_notifications(hass: HomeAssistant, mgr: LicenseManager) -> N
     _LOGGER.debug("[Hidroelectrica] Notificare expirare creată: %s", issue_id)
 
 
+def _cleanup_domain(hass: HomeAssistant) -> None:
+    """Oprește verificarea licenței și eliberează datele domeniului."""
+    domain_data = hass.data.pop(DOMAIN, None) or {}
+    cancel_check = domain_data.pop("_cancel_license_check", None)
+    if cancel_check:
+        cancel_check()
+
+
+def _schedule_license_check(hass: HomeAssistant, mgr: LicenseManager) -> None:
+    """Programează următoarea verificare a licenței (un singur timer, reprogramat mereu).
+
+    Momentul vine de la server: imediat după `valid_until`, sau cu backoff
+    (60s → 1h) cât timp serverul nu răspunde. La fiecare verificare: /check
+    (+ /validate pentru licențe); dacă validitatea s-a schimbat → notificări
+    actualizate + reload.
+    """
+    if hass.is_stopping:
+        return  # la oprire sesiunea HTTP se închide — nu mai verificăm
+    domain_data = hass.data.get(DOMAIN)
+    if domain_data is None or domain_data.get(LICENSE_DATA_KEY) is not mgr:
+        return
+    cancel_prev = domain_data.pop("_cancel_license_check", None)
+    if cancel_prev:
+        cancel_prev()
+
+    delay = mgr.check_interval_seconds + (2 if not mgr.needs_heartbeat else 0)
+
+    async def _async_check() -> None:
+        try:
+            was_valid = mgr.is_valid
+            if mgr.needs_heartbeat:
+                await mgr.async_heartbeat()
+            now_valid = mgr.is_valid
+            if hass.data.get(DOMAIN, {}).get(LICENSE_DATA_KEY) is not mgr:
+                return  # integrarea a fost descărcată în timpul verificării
+            if was_valid != now_valid:
+                if now_valid:
+                    _LOGGER.info("[Hidroelectrica] Licența a redevenit validă — reîncarc")
+                else:
+                    _LOGGER.warning("[Hidroelectrica] Licența a devenit invalidă — reîncarc")
+                _update_license_notifications(hass, mgr)
+                await mgr._async_reload_entries()
+        except Exception:  # noqa: BLE001 — timer-ul nu trebuie să se oprească
+            _LOGGER.exception("[Hidroelectrica] Eroare la verificarea periodică a licenței")
+        finally:
+            _schedule_license_check(hass, mgr)
+
+    @callback
+    def _on_timer(_now) -> None:
+        domain_now = hass.data.get(DOMAIN, {})
+        domain_now.pop("_cancel_license_check", None)
+        if hass.is_stopping or domain_now.get(LICENSE_DATA_KEY) is not mgr:
+            return
+        if not any(
+            e.state in _STARI_ACTIVE for e in hass.config_entries.async_entries(DOMAIN)
+        ):
+            # Ex: intrare dezactivată cât era în „setup retry" (HA nu apelează unload)
+            _cleanup_domain(hass)
+            return
+        # Task de fundal: pornirea/oprirea Home Assistant nu așteaptă
+        # niciodată serverul de licențe (issue #329).
+        hass.async_create_background_task(
+            _async_check(), f"{DOMAIN}_license_check"
+        )
+
+    domain_data["_cancel_license_check"] = async_call_later(hass, delay, _on_timer)
+
+
+async def _async_discover_accounts(
+    hass: HomeAssistant, entry: ConfigEntry, api_client: HidroelectricaApiClient
+) -> list[str]:
+    """Descoperă conturile (UAN) pentru o intrare fără selecție și le salvează."""
+    try:
+        await api_client.async_ensure_authenticated()
+        accounts = await api_client.async_fetch_utility_accounts()
+    except HidroelectricaAuthError as err:
+        raise ConfigEntryNotReady(f"Autentificare Hidroelectrica eșuată: {err}") from err
+    except HidroelectricaApiError as err:
+        raise ConfigEntryNotReady(f"Conturile Hidroelectrica nu pot fi obținute: {err}") from err
+
+    selected = extract_all_accounts(accounts)
+    if not selected:
+        raise ConfigEntryNotReady("Hidroelectrica nu a returnat niciun cont.")
+
+    _LOGGER.warning(
+        "Intrarea %s nu avea conturi selectate — se monitorizează toate cele %d "
+        "conturi găsite (se pot modifica din Opțiuni → Setări cont).",
+        entry.entry_id,
+        len(selected),
+    )
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            **entry.data,
+            "select_all": True,
+            CONF_SELECTED_ACCOUNTS: selected,
+            CONF_ACCOUNT_METADATA: build_account_metadata(accounts),
+        },
+    )
+    return selected
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Configurează integrarea pentru o intrare specifică (config entry)."""
     _LOGGER.info(
@@ -119,175 +236,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     # ── Inițializare License Manager (o singură instanță per domeniu) ──
-    if LICENSE_DATA_KEY not in hass.data.get(DOMAIN, {}):
-        _LOGGER.debug("[Hidroelectrica] Inițializez LicenseManager (prima entry)")
+    if LICENSE_DATA_KEY not in hass.data[DOMAIN]:
         license_mgr = LicenseManager(hass)
-        # IMPORTANT: setăm referința ÎNAINTE de async_load() pentru a preveni
-        # race condition-ul: async_load() face await HTTP, ceea ce cedează
-        # event loop-ul. Fără această ordine, alte entry-uri concurente ar vedea
-        # LICENSE_DATA_KEY ca lipsă și ar crea câte un LicenseManager duplicat,
-        # generând N request-uri /check simultane (câte unul per entry).
+        # Referința se setează ÎNAINTE de async_load(): async_load() face await HTTP,
+        # iar intrările configurate în paralel nu trebuie să creeze manageri duplicați.
         hass.data[DOMAIN][LICENSE_DATA_KEY] = license_mgr
-        await license_mgr.async_load()
+        try:
+            await license_mgr.async_load()
+        except Exception:
+            hass.data[DOMAIN].pop(LICENSE_DATA_KEY, None)
+            raise
         _LOGGER.debug(
             "[Hidroelectrica] LicenseManager: status=%s, valid=%s, fingerprint=%s...",
             license_mgr.status,
             license_mgr.is_valid,
             license_mgr.fingerprint[:16],
         )
-
-        # Heartbeat periodic — intervalul vine de la server (via valid_until)
-        from datetime import timedelta
-
-        interval_sec = license_mgr.check_interval_seconds
-        _LOGGER.debug(
-            "[Hidroelectrica] Programez heartbeat periodic la fiecare %d secunde (%d ore)",
-            interval_sec,
-            interval_sec // 3600,
-        )
-
-        async def _heartbeat_periodic(_now: Any) -> None:
-            """Verifică statusul la server dacă cache-ul a expirat.
-
-            Logică:
-            1. Captează is_valid ÎNAINTE de heartbeat
-            2. Dacă cache expirat → contactează serverul
-            3. Captează is_valid DUPĂ heartbeat
-            4. Dacă starea s-a schimbat → reload entries (tranziție curată)
-            5. Reprogramează heartbeat-ul la intervalul actualizat de server
-            """
-            mgr: LicenseManager | None = hass.data.get(DOMAIN, {}).get(
-                LICENSE_DATA_KEY
-            )
-            if not mgr:
-                _LOGGER.debug("[Hidroelectrica] Heartbeat: LicenseManager nu există, skip")
-                return
-
-            # Captează starea ÎNAINTE de heartbeat
-            was_valid = mgr.is_valid
-
-            if mgr.needs_heartbeat:
-                _LOGGER.debug("[Hidroelectrica] Heartbeat: cache expirat, verific la server")
-                await mgr.async_heartbeat()
-
-                # Captează starea DUPĂ heartbeat
-                now_valid = mgr.is_valid
-
-                # Detectează tranziții pe care async_check_status nu le-a prins
-                # (ex: server inaccesibil + cache expirat → is_valid devine False)
-                if was_valid and not now_valid:
-                    _LOGGER.warning(
-                        "[Hidroelectrica] Licența a devenit invalidă — reîncarc senzorii"
-                    )
-                    _update_license_notifications(hass, mgr)
-                    await mgr._async_reload_entries()
-                elif not was_valid and now_valid:
-                    _LOGGER.info(
-                        "[Hidroelectrica] Licența a redevenit validă — reîncarc senzorii"
-                    )
-                    _update_license_notifications(hass, mgr)
-                    await mgr._async_reload_entries()
-
-                # Reprogramează heartbeat-ul la intervalul actualizat de server
-                new_interval = mgr.check_interval_seconds
-                _LOGGER.debug(
-                    "[Hidroelectrica] Heartbeat: reprogramez la %d secunde (%d min)",
-                    new_interval,
-                    new_interval // 60,
-                )
-                # Oprește vechiul timer
-                cancel_old = hass.data.get(DOMAIN, {}).get("_cancel_heartbeat")
-                if cancel_old:
-                    cancel_old()
-                # Programează noul timer cu intervalul actualizat
-                cancel_new = async_track_time_interval(
-                    hass,
-                    _heartbeat_periodic,
-                    timedelta(seconds=new_interval),
-                )
-                hass.data[DOMAIN]["_cancel_heartbeat"] = cancel_new
-            else:
-                _LOGGER.debug("[Hidroelectrica] Heartbeat: cache valid, nu e nevoie de verificare")
-
-        # Stocăm cancel-ul heartbeat-ului la nivel de domeniu,
-        # NU pe entry (ca să nu dispară când se șterge prima entry)
-        cancel_heartbeat = async_track_time_interval(
-            hass,
-            _heartbeat_periodic,
-            timedelta(seconds=interval_sec),
-        )
-        hass.data[DOMAIN]["_cancel_heartbeat"] = cancel_heartbeat
-        _LOGGER.debug("[Hidroelectrica] Heartbeat programat și stocat în hass.data")
-
-        # ── Timer precis la valid_until (zero gap la expirare cache) ──
-        def _schedule_cache_expiry_check(mgr_ref: LicenseManager) -> None:
-            """Programează un check EXACT la momentul expirării cache-ului.
-
-            Elimină complet fereastra dintre expirarea cache-ului și
-            următorul heartbeat periodic. La expirare, contactează
-            serverul imediat și declanșează reload dacă starea se schimbă.
-            """
-            # Anulează timer-ul anterior (dacă există)
-            cancel_prev = hass.data.get(DOMAIN, {}).pop(
-                "_cancel_cache_expiry", None
-            )
-            if cancel_prev:
-                cancel_prev()
-
-            valid_until = (mgr_ref._status_token or {}).get("valid_until")
-            if not valid_until or valid_until <= 0:
-                return
-
-            expiry_dt = dt_util.utc_from_timestamp(valid_until)
-            # Adaugă 2 secunde ca marjă (evită race condition cu cache check)
-            expiry_dt = expiry_dt + timedelta(seconds=2)
-
-            async def _on_cache_expiry(_now) -> None:
-                """Callback executat EXACT la expirarea cache-ului."""
-                mgr_now: LicenseManager | None = hass.data.get(
-                    DOMAIN, {}
-                ).get(LICENSE_DATA_KEY)
-                if not mgr_now:
-                    return
-
-                was_valid = mgr_now.is_valid
-                _LOGGER.debug(
-                    "[Hidroelectrica] Cache expirat — verific imediat la server"
-                )
-                await mgr_now.async_check_status()
-                now_valid = mgr_now.is_valid
-
-                if was_valid != now_valid:
-                    if now_valid:
-                        _LOGGER.info(
-                            "[Hidroelectrica] Licența a redevenit validă — reîncarc"
-                        )
-                    else:
-                        _LOGGER.warning(
-                            "[Hidroelectrica] Licența a devenit invalidă — reîncarc"
-                        )
-                    _update_license_notifications(hass, mgr_now)
-                    await mgr_now._async_reload_entries()
-
-                # Programează următorul check (dacă serverul a dat valid_until nou)
-                _schedule_cache_expiry_check(mgr_now)
-
-            cancel_expiry = async_track_point_in_time(
-                hass, _on_cache_expiry, expiry_dt
-            )
-            hass.data[DOMAIN]["_cancel_cache_expiry"] = cancel_expiry
-
-            _LOGGER.debug(
-                "[Hidroelectrica] Cache expiry timer programat la %s",
-                expiry_dt.isoformat(),
-            )
-
-        _schedule_cache_expiry_check(license_mgr)
-
+        _schedule_license_check(hass, license_mgr)
 
         # ── Notificare re-enable (dacă a fost dezactivată anterior) ──
-        was_disabled = hass.data.pop(f"{DOMAIN}_was_disabled", False)
-        if was_disabled:
+        if hass.data.pop(f"{DOMAIN}_was_disabled", False):
             await license_mgr.async_notify_event("integration_enabled")
 
         if not license_mgr.is_valid:
@@ -306,36 +274,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 license_mgr.license_type,
             )
 
-        # ── Verificare inițială notificări expirare licență/trial ──
-        _update_license_notifications(hass, license_mgr)
-    else:
-        _LOGGER.debug(
-            "[Hidroelectrica] LicenseManager există deja (entry suplimentară: %s)",
-            entry.entry_id,
-        )
+    license_mgr = hass.data[DOMAIN][LICENSE_DATA_KEY]
+    # La FIECARE setup — după activare, reload-ul intrărilor șterge notificările
+    # chiar dacă managerul de licențe rămâne același (mai multe conturi).
+    _update_license_notifications(hass, license_mgr)
 
-    session = async_get_clientsession(hass, verify_ssl=False)
+    session = async_get_clientsession(hass)
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
     update_interval = entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-
-    # Conturi selectate
-    selected_accounts = entry.data.get(CONF_SELECTED_ACCOUNTS, [])
-    if not selected_accounts:
-        _LOGGER.error(
-            "Nu există conturi selectate pentru %s (entry_id=%s).",
-            DOMAIN,
-            entry.entry_id,
-        )
-        return False
-
-    _LOGGER.debug(
-        "Conturi selectate pentru %s (entry_id=%s): %s, interval=%ss.",
-        DOMAIN,
-        entry.entry_id,
-        selected_accounts,
-        update_interval,
-    )
 
     # Un singur client API partajat (un singur cont, un singur token)
     api_client = HidroelectricaApiClient(session, username, password)
@@ -364,6 +311,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Curățăm store-ul dacă e gol
     if DOMAIN_TOKEN_STORE in hass.data and not hass.data[DOMAIN_TOKEN_STORE]:
         hass.data.pop(DOMAIN_TOKEN_STORE, None)
+
+    # Conturi selectate
+    selected_accounts = entry.data.get(CONF_SELECTED_ACCOUNTS, [])
+    if not selected_accounts:
+        # Intrare migrată de la v1/v2 (fără selecție) — înainte rămânea picată
+        # definitiv; acum se descoperă conturile și se monitorizează toate.
+        selected_accounts = await _async_discover_accounts(hass, entry, api_client)
+
+    _LOGGER.debug(
+        "Conturi selectate pentru %s (entry_id=%s): %s, interval=%ss.",
+        DOMAIN,
+        entry.entry_id,
+        selected_accounts,
+        update_interval,
+    )
 
     # Metadatele conturilor
     account_metadata = entry.data.get(CONF_ACCOUNT_METADATA, {})
@@ -401,6 +363,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Creăm câte un coordinator per cont selectat
     coordinators: dict[str, HidroelectricaCoordinator] = {}
+    first_error: Exception | None = None
 
     for uan in selected_accounts:
         meta = account_metadata.get(uan, {})
@@ -426,32 +389,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         try:
             await coordinator.async_config_entry_first_refresh()
-        except UpdateFailed as err:
+        except ConfigEntryNotReady as err:
+            # Un cont cu probleme nu blochează celelalte conturi
             _LOGGER.error(
                 "Prima actualizare eșuată (entry_id=%s, UAN=%s): %s",
                 entry.entry_id,
                 uan,
                 err,
             )
-            continue
-        except Exception as err:
-            _LOGGER.exception(
-                "Eroare neașteptată la prima actualizare (entry_id=%s, UAN=%s): %s",
-                entry.entry_id,
-                uan,
-                err,
-            )
+            first_error = first_error or err
             continue
 
         coordinators[uan] = coordinator
 
     if not coordinators:
-        _LOGGER.error(
-            "Niciun coordinator inițializat cu succes pentru %s (entry_id=%s).",
-            DOMAIN,
-            entry.entry_id,
-        )
-        return False
+        # Serverul Hidroelectrica nu răspunde (sau nu răspundea la pornire):
+        # HA reîncearcă automat (înainte: return False = integrare picată
+        # până la reload manual).
+        raise ConfigEntryNotReady(
+            f"Niciun cont Hidroelectrica nu a putut fi actualizat: {first_error}"
+        ) from first_error
 
     _LOGGER.info(
         "%s coordinatoare active din %s conturi selectate (entry_id=%s).",
@@ -460,11 +417,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.entry_id,
     )
 
-    # Salvăm datele runtime + entry_id
-    hass.data[DOMAIN][entry.entry_id] = entry
+    # Salvăm datele runtime
     entry.runtime_data = HidroelectricaRuntimeData(
         coordinators=coordinators,
         api_client=api_client,
+        config_signature=_config_signature(entry),
     )
 
     # Încărcăm platformele (sensor + button)
@@ -483,7 +440,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reîncarcă integrarea când opțiunile se schimbă."""
+    """Reîncarcă integrarea când configurația s-a schimbat efectiv.
+
+    Listener-ul e apelat la ORICE actualizare a intrării — inclusiv când
+    coordinatorul salvează token-ul SEW după un re-login. Acelea sunt ignorate
+    (înainte: fiecare re-login reîncărca integrarea și refăcea toate cererile).
+    """
+    runtime = getattr(entry, "runtime_data", None)
+    if runtime is not None and runtime.config_signature == _config_signature(entry):
+        return
     _LOGGER.info(
         "Opțiunile integrării %s s-au schimbat (entry_id=%s). Se reîncarcă...",
         DOMAIN,
@@ -500,18 +465,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if ok:
-        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-        _LOGGER.debug("[Hidroelectrica] Entry %s eliminat din hass.data", entry.entry_id)
-
-        # Verifică dacă mai sunt entry-uri active (sursa de adevăr: config_entries)
+        # Doar intrările ACTIVE contează (cele dezactivate / descărcate nu folosesc
+        # managerul de licențe — altfel acesta și timer-ul nu s-ar opri niciodată).
         entry_ids_ramase = [
             e.entry_id
             for e in hass.config_entries.async_entries(DOMAIN)
-            if e.entry_id != entry.entry_id
+            if e.entry_id != entry.entry_id and e.state in _STARI_ACTIVE
         ]
 
         _LOGGER.debug(
-            "[Hidroelectrica] Entry-uri rămase după unload: %d (%s)",
+            "[Hidroelectrica] Entry-uri active rămase după unload: %d (%s)",
             len(entry_ids_ramase),
             entry_ids_ramase or "niciuna",
         )
@@ -520,7 +483,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.info("[Hidroelectrica] Ultima entry descărcată — curăț domeniul complet")
 
             # ── Notificare lifecycle (înainte de cleanup!) ──
-            mgr = hass.data[DOMAIN].get(LICENSE_DATA_KEY)
+            mgr = hass.data.get(DOMAIN, {}).get(LICENSE_DATA_KEY)
             if mgr and not hass.is_stopping:
                 if entry.disabled_by:
                     await mgr.async_notify_event("integration_disabled")
@@ -533,30 +496,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         "fingerprint": mgr.fingerprint,
                         "license_key": mgr._data.get("license_key", ""),
                     })
-                    _LOGGER.debug(
-                        "[Hidroelectrica] Fingerprint salvat pentru async_remove_entry"
-                    )
 
-            # Oprește heartbeat-ul
-            cancel_hb = hass.data[DOMAIN].pop("_cancel_heartbeat", None)
-            if cancel_hb:
-                cancel_hb()
-                _LOGGER.debug("[Hidroelectrica] Heartbeat periodic oprit")
-
-            # Oprește timer-ul de cache expiry
-            cancel_ce = hass.data[DOMAIN].pop("_cancel_cache_expiry", None)
-            if cancel_ce:
-                cancel_ce()
-                _LOGGER.debug("[Hidroelectrica] Cache expiry timer oprit")
-
-            # Elimină LicenseManager
-            hass.data[DOMAIN].pop(LICENSE_DATA_KEY, None)
-            _LOGGER.debug("[Hidroelectrica] LicenseManager eliminat")
-
-            # Elimină domeniul
-            hass.data.pop(DOMAIN, None)
-            _LOGGER.debug("[Hidroelectrica] hass.data[%s] eliminat complet", DOMAIN)
-
+            _cleanup_domain(hass)
             _LOGGER.info("[Hidroelectrica] Cleanup complet — domeniul %s descărcat", DOMAIN)
     else:
         _LOGGER.warning(
@@ -582,6 +523,15 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     # dar fingerprint-ul a fost salvat în hass.data[f"{DOMAIN}_notify"].
     remaining = hass.config_entries.async_entries(DOMAIN)
     if not remaining:
+        # O intrare ștearsă cât era în „setup retry" nu trece prin async_unload_entry
+        if DOMAIN in hass.data:
+            mgr = hass.data[DOMAIN].get(LICENSE_DATA_KEY)
+            if mgr is not None and f"{DOMAIN}_notify" not in hass.data:
+                hass.data[f"{DOMAIN}_notify"] = {
+                    "fingerprint": mgr.fingerprint,
+                    "license_key": mgr._data.get("license_key", ""),
+                }
+            _cleanup_domain(hass)
         notify_data = hass.data.pop(f"{DOMAIN}_notify", None)
         if notify_data and notify_data.get("fingerprint"):
             await _send_lifecycle_event(
@@ -606,7 +556,7 @@ async def _send_lifecycle_event(
 
     import aiohttp
 
-    from .license import INTEGRATION, LICENSE_API_URL
+    from .license import INTEGRATION, LICENSE_API_URL, USER_AGENT
 
     timestamp = int(time.time())
     payload = {
@@ -631,7 +581,7 @@ async def _send_lifecycle_event(
             timeout=aiohttp.ClientTimeout(total=10),
             headers={
                 "Content-Type": "application/json",
-                "User-Agent": "Hidroelectrica-HA-Integration/3.0",
+                "User-Agent": USER_AGENT,
             },
         ) as resp:
             if resp.status == 200:

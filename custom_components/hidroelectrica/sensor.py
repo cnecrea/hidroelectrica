@@ -490,6 +490,23 @@ def _is_compensation(channel: str) -> bool:
     return any(channel.startswith(p) for p in _COMP_PREFIXES)
 
 
+def _extract_invoice_years(data: dict | None) -> dict[int, list]:
+    """Grupează facturile emise (GetBillingHistory) pe anul emiterii."""
+    yearly: dict[int, list] = defaultdict(list)
+    for entry in _get_billing_list(data):
+        year = _extract_year_from_dmy(entry.get("invoiceDate", ""))
+        if year:
+            yearly[year].append(entry)
+    return dict(yearly)
+
+
+def _amount_to_float(value: Any) -> float:
+    """Sumă din API: număr sau text în format românesc ("1.234,56")."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    return parse_romanian_amount(str(value))
+
+
 def _extract_payment_years(
     data: dict | None,
     channel_filter: str | None = None,
@@ -728,6 +745,11 @@ def _build_sensors_for_coordinator(
             "ArhivaPlatiSensor creat cu anul curent %s (lipsesc date inițiale, UAN=%s).",
             current_year, uan,
         )
+
+    # ── 6b. Arhivă facturi (cu numărul real al facturii) — ultimul an ──
+    invoice_years = _extract_invoice_years(coordinator.data)
+    invoice_year = max(invoice_years) if invoice_years else datetime.now().year
+    sensors.append(ArhivaFacturiSensor(coordinator, config_entry, invoice_year))
 
     # ── 7. Arhivă plăți prosumator (compensații ANRE) — doar la prosumator ──
     if has_production:
@@ -1149,6 +1171,9 @@ class FacturaRestantaSensor(HidroelectricaEntity):
             attrs["Ultima factură emisă"] = (
                 f"{latest.get('amount', 'N/A')} lei din {latest.get('invoiceDate', 'N/A')}"
             )
+            # exbel = numărul real al facturii (cel din portalul iHidro și din PDF)
+            if latest.get("exbel"):
+                attrs["Număr factură"] = latest["exbel"]
             if latest.get("invoiceType"):
                 attrs["Tip"] = latest["invoiceType"]
             if latest.get("dueDate"):
@@ -1194,7 +1219,7 @@ class IndexEnergieSensor(HidroelectricaEntity):
             return None
         data = self.coordinator.data
         if not data:
-            return 0
+            return None
 
         # Sursa principală: meter_read_history (filtrat pe seria activă + registru consum)
         latest = _get_latest_meter_read(data, register_filter="1.8.0")
@@ -1224,10 +1249,11 @@ class IndexEnergieSensor(HidroelectricaEntity):
         if mcs_index is not None:
             return mcs_index
 
-        _LOGGER.warning(
+        # Fără index cunoscut → „necunoscut" (0 kWh ar fi o valoare falsă)
+        _LOGGER.debug(
             "IndexEnergieSensor: toate sursele au eșuat (UAN=%s).", self._uan,
         )
-        return 0
+        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -1352,7 +1378,7 @@ class IndexEnergieProdusSensor(HidroelectricaEntity):
             return None
         data = self.coordinator.data
         if not data:
-            return 0
+            return None
 
         latest = _get_latest_meter_read(data, register_filter="1.8.0_P")
         if latest:
@@ -1362,7 +1388,7 @@ class IndexEnergieProdusSensor(HidroelectricaEntity):
                     return int(idx)
                 except (ValueError, TypeError):
                     pass
-        return 0
+        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -1832,6 +1858,99 @@ class ArhivaPlatiSensor(HidroelectricaEntity):
 
         attrs["Plăți efectuate"] = len(sorted_entries)
         attrs["Sumă totală"] = f"{format_ron(total)} lei"
+        attrs["attribution"] = ATTRIBUTION
+        return attrs
+
+
+class ArhivaFacturiSensor(HidroelectricaEntity):
+    """Senzor pentru facturile emise într-un an.
+
+    Citește dinamic din coordinator.data["billing_history"]
+    → result.objBillingHistoryEntity.
+    Câmpuri reale: amount, invoiceDate (dd/MM/yyyy), dueDate, invoiceType,
+                   exbel (numărul real al facturii, ca în portalul iHidro / PDF).
+    """
+
+    _attr_icon = "mdi:file-document-multiple-outline"
+    _attr_translation_key = "arhiva_facturi"
+
+    def __init__(self, coordinator, config_entry, year: int):
+        super().__init__(coordinator, config_entry)
+        self._year = year
+        self._attr_name = f"{year} → Arhivă facturi"
+        self._attr_unique_id = f"{DOMAIN}_arhiva_facturi_{self._uan}_{year}"
+        self._custom_entity_id = f"sensor.{DOMAIN}_{self._uan}_arhiva_facturi_{year}"
+
+    def _get_entries(self) -> list:
+        """Facturile din anul senzorului, în ordine cronologică."""
+        entries = _extract_invoice_years(self.coordinator.data).get(self._year, [])
+
+        def sort_key(e):
+            parsed = _parse_date_dmy(e.get("invoiceDate", ""))
+            return parsed if parsed else datetime.min
+
+        return sorted(entries, key=sort_key)
+
+    @property
+    def native_value(self):
+        if not self._license_valid:
+            return "Licență necesară"
+        return len(self._get_entries())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        if not self._license_valid:
+            return {"licență": "necesară"}
+        attrs: dict[str, Any] = {}
+        entries = self._get_entries()
+
+        if not entries:
+            attrs["Date"] = "Nu sunt disponibile facturi"
+            attrs["Facturi emise"] = 0
+            attrs["Sumă totală"] = "0,00 lei"
+            attrs["attribution"] = ATTRIBUTION
+            return attrs
+
+        total = 0.0
+        lista: list[dict[str, Any]] = []
+        for idx, entry in enumerate(entries, start=1):
+            try:
+                suma = _amount_to_float(entry.get("amount", 0))
+            except (ValueError, TypeError):
+                suma = 0.0
+            total += suma
+
+            invoice_date = entry.get("invoiceDate", "")
+            parsed_date = _parse_date_dmy(invoice_date)
+            month_name = (
+                MONTHS_NUM_RO.get(parsed_date.month, "necunoscut")
+                if parsed_date else invoice_date or "necunoscut"
+            )
+            numar = entry.get("exbel") or ""
+            tip = entry.get("invoiceType") or ""
+            scadenta = entry.get("dueDate") or ""
+
+            detalii = [f"{format_ron(suma)} lei"]
+            if numar:
+                detalii.append(f"nr. {numar}")
+            if scadenta:
+                detalii.append(f"scadentă {scadenta}")
+            if tip and tip != "Factură":
+                detalii.append(tip)
+            attrs[f"Factură {idx} luna {month_name}"] = " · ".join(detalii)
+
+            lista.append({
+                "numar": numar,
+                "data": invoice_date,
+                "scadenta": scadenta,
+                "suma": round(suma, 2),
+                "tip": tip,
+            })
+
+        attrs["Facturi emise"] = len(entries)
+        attrs["Sumă totală"] = f"{format_ron(total)} lei"
+        # Listă structurată (pentru șabloane / scripturi, ex. potrivire cu plățile)
+        attrs["facturi"] = lista
         attrs["attribution"] = ATTRIBUTION
         return attrs
 
