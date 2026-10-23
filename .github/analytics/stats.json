@@ -1,7 +1,7 @@
 {
   "repo": "",
   "prima_colectare": "",
-  "ultima_actualizare": "2026-09-22T10:46:48Z",
+  "ultima_actualizare": "2026-10-23T10:47:14Z",
   "zilnic": {
     "2026-03-01": {
       "clones_total": 2,
@@ -6350,10 +6350,118 @@
           "vizitatori_unici": 1
         }
       ]
+    },
+    "2026-10-09": {
+      "clones_total": 8,
+      "clones_unice": 6,
+      "views_total": 4,
+      "views_unice": 3
+    },
+    "2026-10-10": {
+      "clones_total": 0,
+      "clones_unice": 0,
+      "views_total": 0,
+      "views_unice": 0
+    },
+    "2026-10-11": {
+      "clones_total": 3,
+      "clones_unice": 3,
+      "views_total": 19,
+      "views_unice": 4
+    },
+    "2026-10-12": {
+      "clones_total": 6,
+      "clones_unice": 1,
+      "views_total": 2,
+      "views_unice": 2
+    },
+    "2026-10-13": {
+      "clones_total": 3,
+      "clones_unice": 3,
+      "views_total": 1,
+      "views_unice": 1
+    },
+    "2026-10-14": {
+      "clones_total": 4,
+      "clones_unice": 4,
+      "views_total": 8,
+      "views_unice": 4
+    },
+    "2026-10-15": {
+      "clones_total": 5,
+      "clones_unice": 5,
+      "views_total": 15,
+      "views_unice": 6
+    },
+    "2026-10-16": {
+      "clones_total": 0,
+      "clones_unice": 0,
+      "views_total": 11,
+      "views_unice": 4
+    },
+    "2026-10-17": {
+      "clones_total": 3,
+      "clones_unice": 3,
+      "views_total": 5,
+      "views_unice": 4
+    },
+    "2026-10-18": {
+      "clones_total": 6,
+      "clones_unice": 5,
+      "views_total": 0,
+      "views_unice": 0
+    },
+    "2026-10-19": {
+      "clones_total": 5,
+      "clones_unice": 5,
+      "views_total": 2,
+      "views_unice": 1
+    },
+    "2026-10-20": {
+      "clones_total": 6,
+      "clones_unice": 4,
+      "views_total": 3,
+      "views_unice": 3
+    },
+    "2026-10-21": {
+      "clones_total": 8,
+      "clones_unice": 4,
+      "views_total": 2,
+      "views_unice": 1
+    },
+    "2026-10-22": {
+      "clones_total": 56,
+      "clones_unice": 26,
+      "views_total": 2,
+      "views_unice": 2
+    },
+    "2026-10-23": {
+      "stars": 104,
+      "forks": 8,
+      "watchers": 1,
+      "open_issues": 0,
+      "referrers": [
+        {
+          "sursa": "Google",
+          "vizite": 9,
+          "vizitatori_unici": 5
+        },
+        {
+          "sursa": "github.com",
+          "vizite": 6,
+          "vizitatori_unici": 6
+        },
+        {
+          "sursa": "hubinteligent.org",
+          "vizite": 5,
+          "vizitatori_unici": 5
+        }
+      ]
     }
   },
   "releases": {
-    "3.8.4": 16,
+    "3.8.5": 1,
+    "3.8.4": 17,
     "3.8.3": 3,
     "3.8.2": 5,
     "3.8.1": 4,
