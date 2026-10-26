@@ -1,0 +1,25 @@
+name: Corectare titlu cerere de licență
+
+on:
+  issues:
+    types:
+      - opened
+
+permissions:
+  issues: write
+
+jobs:
+  corectare-titlu:
+    if: contains(github.event.issue.labels.*.name, 'licență')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setare titlu standard
+        env:
+          GH_TOKEN: ${{ secrets.HUBINTELIGENT_PAT }}
+          NUMAR_ISSUE: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh issue edit "$NUMAR_ISSUE" \
+            --repo "$REPO" \
+            --title "Cerere licență integrare"
