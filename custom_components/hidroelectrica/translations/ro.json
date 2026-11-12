@@ -35,13 +35,13 @@
       "no_data": "Nu s-au găsit conturi după autentificare.",
       "no_account_selected": "Selectați cel puțin un cont.",
       "unknown": "A apărut o eroare neașteptată.",
-      "license_key_empty": "Introduceți o cheie de licență.",
-      "license_key_invalid": "Cheie de licență invalidă. Verificați formatul și încercați din nou.",
-      "license_already_used": "Această cheie de licență a fost deja folosită pe altă instalare.",
-      "license_key_expired": "Această cheie de licență a expirat.",
-      "license_fingerprint_mismatch": "Această cheie de licență este legată de altă instalare.",
-      "license_network_error": "Nu se poate conecta la serverul de licențe. Verificați conexiunea la internet.",
-      "license_server_error": "Eroare server de licențe. Încercați din nou mai târziu.",
+      "license_key_empty": "Introdu cheia de licență.",
+      "license_key_invalid": "Cheia nu este validă pentru Hidroelectrica. Copiaz-o întreagă din email: cheile acestei integrări încep cu HDEL-.",
+      "license_already_used": "Cheia este activă pe altă instanță Home Assistant. Pe adresa licenței primești un email cu un link de mutare; după ce confirmi, introdu cheia din nou aici.",
+      "license_key_expired": "Cheia de licență a expirat.",
+      "license_fingerprint_mismatch": "Activarea nu a putut fi confirmată pentru această instanță. Încearcă din nou; dacă mesajul se repetă, folosește formularul „Problemă licență”.",
+      "license_network_error": "Serverul de licențe nu poate fi contactat. Verifică dacă Home Assistant are acces la internet și încearcă din nou.",
+      "license_server_error": "Serverul de licențe nu a putut verifica cheia acum. Încearcă din nou peste câteva minute.",
       "already_configured": "Acest cont este deja configurat într-o altă intrare."
     },
     "step": {
@@ -72,21 +72,24 @@
       },
       "licenta": {
         "title": "Licență Hidroelectrica",
-        "description": "{license_status}\n\nIntroduceți cheia de licență pentru a activa sau reînnoi integrarea.",
+        "description": "{license_status}\n\nIntrodu cheia de licență primită pe email.",
         "data": {
           "license_key": "Cheie de licență"
+        },
+        "data_description": {
+          "license_key": "Cheia primită pe email, de forma HDEL-XXXX-XXXX-XXXX-XXXX."
         }
       }
     }
   },
   "issues": {
     "trial_expired": {
-      "title": "Licența de probă a expirat — Hidroelectrica România",
-      "description": "Perioada de evaluare gratuită s-a încheiat.\n\nSenzorii sunt dezactivați până la obținerea unei licențe.\n\n[Obține o licență acum]({learn_more_url})"
+      "title": "Perioada de test Hidroelectrica s-a încheiat",
+      "description": "Senzorii nu se mai actualizează până la activarea unei licențe.\n\n[Obține o licență]({learn_more_url})"
     },
     "license_expired": {
-      "title": "Licența a expirat — Hidroelectrica România",
-      "description": "Licența pentru această integrare a expirat.\n\nSenzorii sunt dezactivați până la reînnoirea licenței.\n\n[Reînnoiește licența]({learn_more_url})"
+      "title": "Licența Hidroelectrica a expirat",
+      "description": "Senzorii nu se mai actualizează până la reînnoirea licenței.\n\n[Obține o licență nouă]({learn_more_url})"
     }
   }
 }

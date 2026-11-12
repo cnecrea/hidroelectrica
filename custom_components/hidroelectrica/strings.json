@@ -35,13 +35,13 @@
       "no_data": "No accounts found after login.",
       "no_account_selected": "Please select at least one account.",
       "unknown": "An unexpected error occurred.",
-      "license_key_empty": "Please enter a license key.",
-      "license_key_invalid": "Invalid license key. Check the format and try again.",
-      "license_already_used": "This license key has already been used on another installation.",
+      "license_key_empty": "Enter the license key.",
+      "license_key_invalid": "This key is not valid for Hidroelectrica. Copy the whole key from the email: keys for this integration start with HDEL-.",
+      "license_already_used": "This key is active on another Home Assistant instance. The license email address receives a link to move it; after you confirm, enter the key here again.",
       "license_key_expired": "This license key has expired.",
-      "license_fingerprint_mismatch": "This license key is bound to a different installation.",
-      "license_network_error": "Cannot connect to the license server. Check your internet connection.",
-      "license_server_error": "License server error. Please try again later.",
+      "license_fingerprint_mismatch": "Activation could not be confirmed for this instance. Try again; if the message repeats, use the “License problem” form.",
+      "license_network_error": "The license server cannot be reached. Check that Home Assistant has internet access and try again.",
+      "license_server_error": "The license server could not check the key right now. Try again in a few minutes.",
       "already_configured": "This account is already configured in another entry."
     },
     "step": {
@@ -71,22 +71,25 @@
         }
       },
       "licenta": {
-        "title": "Hidroelectrica License",
-        "description": "{license_status}\n\nEnter your license key to activate or renew the integration.",
+        "title": "Hidroelectrica license",
+        "description": "{license_status}\n\nEnter the license key you received by email.",
         "data": {
-          "license_key": "License Key"
+          "license_key": "License key"
+        },
+        "data_description": {
+          "license_key": "The key from your license email, in the form HDEL-XXXX-XXXX-XXXX-XXXX."
         }
       }
     }
   },
   "issues": {
     "trial_expired": {
-      "title": "Trial expired — Hidroelectrica România",
-      "description": "The free trial period has ended.\n\nSensors are disabled until a license is obtained.\n\n[Get a license now]({learn_more_url})"
+      "title": "The Hidroelectrica free trial has ended",
+      "description": "Sensors stop updating until a license is activated.\n\n[Get a license]({learn_more_url})"
     },
     "license_expired": {
-      "title": "License expired — Hidroelectrica România",
-      "description": "The license for this integration has expired.\n\nSensors are disabled until the license is renewed.\n\n[Renew license]({learn_more_url})"
+      "title": "The Hidroelectrica license has expired",
+      "description": "Sensors stop updating until the license is renewed.\n\n[Get a new license]({learn_more_url})"
     }
   }
 }

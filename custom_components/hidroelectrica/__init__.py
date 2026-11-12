@@ -84,19 +84,26 @@ def _update_license_notifications(hass: HomeAssistant, mgr: LicenseManager) -> N
 
     if mgr.has_license:
         issue_id = "license_expired"
-        notif_title = "Hidroelectrica România — Licența a expirat"
+        notif_title = "Licența Hidroelectrica a expirat"
         notif_message = (
-            "Licența pentru integrarea **Hidroelectrica România** a expirat.\n\n"
-            "Senzorii sunt dezactivați până la reînnoirea licenței.\n\n"
-            f"[Reînnoiește licența]({LICENSE_PURCHASE_URL})"
+            "Senzorii integrării **Hidroelectrica** nu se mai actualizează până la reînnoirea licenței.\n\n"
+            f"[Obține o licență nouă]({LICENSE_PURCHASE_URL})"
+        )
+    elif mgr.status == "expired":
+        issue_id = "trial_expired"
+        notif_title = "Perioada de test Hidroelectrica s-a încheiat"
+        notif_message = (
+            "Senzorii integrării **Hidroelectrica** nu se mai actualizează până la activarea unei licențe.\n\n"
+            f"[Obține o licență]({LICENSE_PURCHASE_URL})"
         )
     else:
+        # „unlicensed”: nicio licență activă sau licența nu a putut fi verificată
         issue_id = "trial_expired"
-        notif_title = "Hidroelectrica România — Licența de probă a expirat"
+        notif_title = "Licența Hidroelectrica nu este activă"
         notif_message = (
-            "Perioada de evaluare gratuită pentru integrarea **Hidroelectrica România** s-a încheiat.\n\n"
-            "Senzorii sunt dezactivați până la obținerea unei licențe.\n\n"
-            f"[Obține o licență acum]({LICENSE_PURCHASE_URL})"
+            "Integrarea **Hidroelectrica** nu are o licență activă sau licența nu a putut fi verificată, așa că senzorii "
+            "nu se actualizează. Cheia se introduce în Configurare → Licență.\n\n"
+            f"[Obține o licență]({LICENSE_PURCHASE_URL})"
         )
 
     other_id = "license_expired" if issue_id == "trial_expired" else "trial_expired"
