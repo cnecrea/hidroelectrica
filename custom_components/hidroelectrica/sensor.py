@@ -786,6 +786,10 @@ def _build_sensors_for_coordinator(
     invoice_year = max(invoice_years) if invoice_years else datetime.now().year
     sensors.append(ArhivaFacturiSensor(coordinator, config_entry, invoice_year))
 
+    # ── 6c. Arhive pe ultimele 12 luni (consum + facturi), peste granița anului ──
+    sensors.append(ArhivaConsum12LuniSensor(coordinator, config_entry))
+    sensors.append(ArhivaFacturi12LuniSensor(coordinator, config_entry))
+
     # ── 7. Arhivă plăți prosumator (compensații ANRE) — doar la prosumator ──
     if has_production:
         comp_years = _extract_payment_years(coordinator.data, channel_filter="comp")
@@ -1598,6 +1602,11 @@ class ArhivaConsumSensor(HidroelectricaEntity):
             f"sensor.{DOMAIN}_{self._uan}_arhiva_consum_energie_electrica_{year}"
         )
 
+    def _month_label(self, entry: dict) -> str:
+        """Eticheta lunii din atribute (senzorul pe ultimele 12 luni adaugă și anul)."""
+        month_num = entry.get("Month", 0)
+        return MONTHS_NUM_RO.get(month_num, str(month_num))
+
     def _get_entries(self) -> list:
         """Extrage dinamic intrările pentru anul curent din coordinator.data."""
         usage_years = _extract_usage_years(self.coordinator.data)
@@ -1634,14 +1643,13 @@ class ArhivaConsumSensor(HidroelectricaEntity):
             return attrs
 
         # Ordonăm pe lună
-        sorted_entries = sorted(entries, key=lambda e: e.get("Month", 0))
+        sorted_entries = sorted(entries, key=_usage_sort_key)
 
         # Consum lunar în kWh (value) și sumă facturată în lei (UsageValue)
         for entry in sorted_entries:
-            month_num = entry.get("Month", 0)
             kwh = entry.get("value", 0)
             lei = entry.get("UsageValue", 0)
-            month_name = MONTHS_NUM_RO.get(month_num, str(month_num))
+            month_name = self._month_label(entry)
             attrs[f"Consum lunar {month_name}"] = (
                 f"{format_number_ro(kwh)} kWh ({format_ron(float(lei))} lei)"
             )
@@ -1655,8 +1663,7 @@ class ArhivaConsumSensor(HidroelectricaEntity):
                 if days > 0:
                     kwh_val = float(entry.get("value", 0))
                     daily = round(kwh_val / days, 2)
-                    month_num = entry.get("Month", 0)
-                    month_name = MONTHS_NUM_RO.get(month_num, str(month_num))
+                    month_name = self._month_label(entry)
                     if not has_daily:
                         attrs["────"] = ""
                         has_daily = True
@@ -1916,6 +1923,10 @@ class ArhivaFacturiSensor(HidroelectricaEntity):
         self._attr_unique_id = f"{DOMAIN}_arhiva_facturi_{self._uan}_{year}"
         self._custom_entity_id = f"sensor.{DOMAIN}_{self._uan}_arhiva_facturi_{year}"
 
+    def _month_label(self, parsed_date: datetime | None, month_name: str) -> str:
+        """Eticheta lunii din atribute (senzorul pe ultimele 12 luni adaugă și anul)."""
+        return month_name
+
     def _get_entries(self) -> list:
         """Facturile din anul senzorului, în ordine cronologică."""
         entries = _extract_invoice_years(self.coordinator.data).get(self._year, [])
@@ -1972,7 +1983,7 @@ class ArhivaFacturiSensor(HidroelectricaEntity):
                 detalii.append(f"scadentă {scadenta}")
             if tip and tip != "Factură":
                 detalii.append(tip)
-            attrs[f"Factură {idx} luna {month_name}"] = " · ".join(detalii)
+            attrs[f"Factură {idx} luna {self._month_label(parsed_date, month_name)}"] = " · ".join(detalii)
 
             lista.append({
                 "numar": numar,
@@ -1988,6 +1999,76 @@ class ArhivaFacturiSensor(HidroelectricaEntity):
         attrs["facturi"] = lista
         attrs["attribution"] = ATTRIBUTION
         return attrs
+
+
+# ──────────────────────────────────────────────
+# Arhive pe ultimele 12 luni
+# Responsabilitate: istoric care trece peste granița anului (ex. în ianuarie
+# arată februarie anul trecut – ianuarie, nu doar o lună), fără an în entity_id
+# Surse: GetUsageGeneration, GetBillingHistory (citite la fiecare actualizare)
+# ──────────────────────────────────────────────
+def _usage_sort_key(entry: dict) -> tuple[int, int]:
+    """Cheie de sortare cronologică pentru intrările de consum: (an, lună)."""
+    try:
+        return int(entry.get("Year", 0) or 0), int(entry.get("Month", 0) or 0)
+    except (TypeError, ValueError):
+        return 0, 0
+
+
+def _usage_last_12_months(data: dict | None) -> list:
+    """Ultimele 12 luni de consum disponibile, în ordine cronologică."""
+    entries = [e for e in _get_usage_list(data) if all(_usage_sort_key(e))]
+    entries.sort(key=_usage_sort_key)
+    return entries[-12:]
+
+
+def _invoices_last_12_months(data: dict | None) -> list:
+    """Facturile emise în ultimele 12 luni calendaristice (inclusiv luna curentă)."""
+    now = datetime.now()
+    first = now.year * 12 + now.month - 11
+    selected = []
+    for entry in _get_billing_list(data):
+        parsed = _parse_date_dmy(entry.get("invoiceDate", ""))
+        if parsed and parsed.year * 12 + parsed.month >= first:
+            selected.append((parsed, entry))
+    selected.sort(key=lambda item: item[0])
+    return [entry for _, entry in selected]
+
+
+class ArhivaConsum12LuniSensor(ArhivaConsumSensor):
+    """Consumul pe ultimele 12 luni disponibile (atribute „Consum lunar {lună} {an}”)."""
+
+    def __init__(self, coordinator, config_entry):
+        super().__init__(coordinator, config_entry, 0)
+        self._year = None
+        self._attr_name = "Arhivă consum energie electrică"
+        self._attr_unique_id = f"{DOMAIN}_arhiva_consum_{self._uan}"
+        self._custom_entity_id = (
+            f"sensor.{DOMAIN}_{self._uan}_arhiva_consum_energie_electrica"
+        )
+
+    def _month_label(self, entry: dict) -> str:
+        return f"{super()._month_label(entry)} {entry.get('Year', '')}".strip()
+
+    def _get_entries(self) -> list:
+        return _usage_last_12_months(self.coordinator.data)
+
+
+class ArhivaFacturi12LuniSensor(ArhivaFacturiSensor):
+    """Facturile emise în ultimele 12 luni (atribute „Factură N luna {lună} {an}”)."""
+
+    def __init__(self, coordinator, config_entry):
+        super().__init__(coordinator, config_entry, 0)
+        self._year = None
+        self._attr_name = "Arhivă facturi"
+        self._attr_unique_id = f"{DOMAIN}_arhiva_facturi_{self._uan}"
+        self._custom_entity_id = f"sensor.{DOMAIN}_{self._uan}_arhiva_facturi"
+
+    def _month_label(self, parsed_date: datetime | None, month_name: str) -> str:
+        return f"{month_name} {parsed_date.year}" if parsed_date else month_name
+
+    def _get_entries(self) -> list:
+        return _invoices_last_12_months(self.coordinator.data)
 
 
 class ArhivaPlatiProsumatorSensor(HidroelectricaEntity):

@@ -143,6 +143,8 @@ Pentru fiecare cont selectat, se creează un dispozitiv cu numele `Hidroelectric
 | Arhivă consum | Consumul lunar pe ultimul an disponibil |
 | Arhivă index | Istoricul citirilor de index pe ultimul an |
 | Arhivă plăți | Plățile efectuate pe ultimul an |
+| Arhivă consum energie electrică | Consumul lunar pe ultimele 12 luni (peste granița anului) |
+| Arhivă facturi | Facturile emise în ultimele 12 luni |
 
 ### Senzori suplimentari la un cont de prosumator
 
