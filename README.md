@@ -51,6 +51,11 @@ Integrare Home Assistant pentru **monitorizarea completă** a conturilor Hidroel
 - Plățile efective realizate de utilizator către companie (canale de tip `Incasari-*`).
 - Atribute: fiecare plată cu luna, canalul de plată, suma; total plăți, sumă totală.
 
+**Arhivă consum energie electrică / Arhivă facturi** *(ultimele 12 luni)*
+- Aceleași date ca arhivele anuale de consum și facturi, dar pe ultimele 12 luni, peste granița anului (în ianuarie arată februarie anul trecut – ianuarie, nu o singură lună).
+- Fără an în `entity_id` (`sensor.hidroelectrica_XXXXXXXX_arhiva_consum_energie_electrica`, `sensor.hidroelectrica_XXXXXXXX_arhiva_facturi`), deci nu trebuie schimbat în dashboard la început de an.
+- Atribute: «Consum lunar {lună} {an}», respectiv «Factură N luna {lună} {an}».
+
 ### Senzori exclusivi prosumator
 
 Acești senzori se creează **automat** când integrarea detectează registrul `1.8.0_P` în istoricul de citiri.
