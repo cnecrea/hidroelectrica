@@ -234,6 +234,41 @@ def _compute_closing_date(wd: dict) -> str:
     return wd.get("NextMonthClosingDate", "")
 
 
+def _window_period(wd: dict, is_open: bool) -> tuple[str, str]:
+    """Perioada de autocitire afișată (deschidere, închidere) ca „dd/mm/yyyy”.
+
+    Cât timp fereastra este deschisă, NextMonthOpeningDate indică deja fereastra
+    lunii VIITOARE (ex. pe 23/11, cu fereastra 22–26 deschisă, API-ul dă 22/12).
+    În acest caz perioada curentă se construiește din OpeningDate/ClosingDate
+    (zilele ferestrei) și luna curentă. Când fereastra e închisă, se afișează
+    următoarea fereastră, ca înainte.
+    """
+    if is_open:
+        try:
+            from datetime import date
+
+            from homeassistant.util import dt as dt_util
+
+            today = dt_util.now().date()
+            open_d = int(wd.get("OpeningDate", ""))
+            close_d = int(wd.get("ClosingDate", ""))
+            y, m = today.year, today.month
+            if close_d >= open_d:
+                start, end = date(y, m, open_d), date(y, m, close_d)
+            elif today.day >= open_d:
+                # fereastra trece în luna următoare (ex. 28 → 2)
+                ny, nm = (y + 1, 1) if m == 12 else (y, m + 1)
+                start, end = date(y, m, open_d), date(ny, nm, close_d)
+            else:
+                # fereastra s-a deschis luna trecută
+                py, pm = (y - 1, 12) if m == 1 else (y, m - 1)
+                start, end = date(py, pm, open_d), date(y, m, close_d)
+            return start.strftime("%d/%m/%Y"), end.strftime("%d/%m/%Y")
+        except (TypeError, ValueError):
+            pass
+    return wd.get("NextMonthOpeningDate", ""), _compute_closing_date(wd)
+
+
 def _get_pods_list(data: dict | None) -> list:
     """Extrage lista de PODs din GetPods.
 
@@ -1335,8 +1370,7 @@ class IndexEnergieSensor(HidroelectricaEntity):
             is_open_raw = wd.get("Is_Window_Open", "0")
             is_open = is_open_raw == "1"
             attrs["Autorizat să citească contorul"] = "Da" if is_open else "Nu"
-            open_date = wd.get("NextMonthOpeningDate", "")
-            close_date = _compute_closing_date(wd)
+            open_date, close_date = _window_period(wd, is_open)
             if open_date and close_date:
                 attrs["Perioadă transmitere index"] = f"{open_date} — {close_date}"
             if close_date:
@@ -1490,8 +1524,9 @@ class CitirePermisaSensor(HidroelectricaEntity):
         wd = _get_window_data(data)
 
         if wd:
-            open_date = wd.get("NextMonthOpeningDate", "")
-            close_date = _compute_closing_date(wd)
+            open_date, close_date = _window_period(
+                wd, wd.get("Is_Window_Open", "0") == "1"
+            )
 
             if open_date and close_date:
                 attrs["Perioadă transmitere index"] = f"{open_date} — {close_date}"
